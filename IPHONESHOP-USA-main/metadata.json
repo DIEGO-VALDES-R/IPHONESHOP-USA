@@ -1,7 +1,0 @@
-{
-  "name": "IPHONESHOP USA",
-  "description": "Sistema ERP y POS especializado en retail de productos Apple. Multi-sucursal, control de IMEI y gestión financiera.",
-  "requestFramePermissions": [
-    "camera"
-  ]
-}
