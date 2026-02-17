@@ -18,7 +18,7 @@ const POS: React.FC = () => {
   const [showInvoice, setShowInvoice] = useState(false);
   const [lastSale, setLastSale] = useState<Sale | null>(null);
 
-  // IVA Toggle
+  // IVA Toggle — usa la tasa configurada en Settings
   const defaultTaxRate = company?.config?.tax_rate ?? 19;
   const [applyIva, setApplyIva] = useState(true);
 
@@ -41,14 +41,15 @@ const POS: React.FC = () => {
 
   const totals = useMemo(() => {
     const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    // CORRECCIÓN: siempre usa defaultTaxRate, no el tax_rate del producto
     const tax = applyIva
-      ? cart.reduce((acc, item) => acc + ((item.price * (item.tax_rate ?? defaultTaxRate) / 100) * item.quantity), 0)
+      ? subtotal * (defaultTaxRate / 100)
       : 0;
     const total = subtotal + tax;
     const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
     const remaining = total - totalPaid;
     return { subtotal, tax, total, totalPaid, remaining };
-  }, [cart, payments, applyIva]);
+  }, [cart, payments, applyIva, defaultTaxRate]);
 
   useEffect(() => {
     if (session?.status === 'OPEN' && !isPaymentModalOpen && !showInvoice) {
@@ -74,14 +75,14 @@ const POS: React.FC = () => {
       if (cart.find(item => item.product.id === product.id && item.serial_number === serial)) {
         toast.error('Este serial ya esta en el carrito'); return;
       }
-      setCart([...cart, { product, quantity: 1, serial_number: serial, price: product.price, tax_rate: product.tax_rate ?? 19, discount: 0 }]);
+      setCart([...cart, { product, quantity: 1, serial_number: serial, price: product.price, tax_rate: defaultTaxRate, discount: 0 }]);
     } else {
       const existing = cart.find(item => item.product.id === product.id);
       if (existing) {
         if (existing.quantity >= product.stock_quantity) { toast.error('Stock insuficiente'); return; }
         setCart(cart.map(item => item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
       } else {
-        setCart([...cart, { product, quantity: 1, price: product.price, tax_rate: product.tax_rate ?? 19, discount: 0 }]);
+        setCart([...cart, { product, quantity: 1, price: product.price, tax_rate: defaultTaxRate, discount: 0 }]);
       }
     }
     toast.success('Agregado');
@@ -178,8 +179,8 @@ const POS: React.FC = () => {
                 className="flex flex-col items-start text-left p-4 rounded-lg border border-slate-200 hover:border-blue-500 hover:shadow-md transition-all bg-white group disabled:opacity-50 disabled:bg-slate-50"
               >
                 <div className="w-full aspect-square bg-slate-100 rounded-md mb-3 flex items-center justify-center text-slate-300 group-hover:text-blue-400 overflow-hidden">
-                  {product.image_url ? (
-                    <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                  {(product as any).image_url ? (
+                    <img src={(product as any).image_url} alt={product.name} className="w-full h-full object-cover" />
                   ) : (
                     <Smartphone size={40} />
                   )}
@@ -306,7 +307,7 @@ const POS: React.FC = () => {
                   <h4 className="text-sm font-bold text-slate-500 mb-2">Total a Pagar</h4>
                   <div className="text-3xl font-bold text-slate-800">{formatMoney(totals.total)}</div>
                   <div className={`text-xs mt-1 font-medium ${applyIva ? 'text-green-600' : 'text-slate-400'}`}>
-                    {applyIva ? "IVA ${defaultTaxRate}% incluido" : 'Sin IVA'}
+                    {applyIva ? `IVA ${defaultTaxRate}% incluido` : 'Sin IVA'}
                   </div>
                   <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
                     <h5 className="text-xs font-bold text-slate-500 uppercase mb-2">Pagos Agregados</h5>
@@ -368,6 +369,3 @@ const POS: React.FC = () => {
 };
 
 export default POS;
-
-
-
