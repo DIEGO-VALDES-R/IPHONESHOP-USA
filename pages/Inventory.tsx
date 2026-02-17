@@ -9,6 +9,7 @@ const EMPTY_PRODUCT = {
   company_id: '', name: '', sku: '', category: '', brand: '',
   description: '', price: 0, cost: 0, tax_rate: 19,
   stock_min: 5, stock_quantity: 0, type: 'STANDARD' as const, is_active: true,
+  image_url: '',
 };
 
 const Inventory: React.FC = () => {
@@ -208,3 +209,5 @@ const Inventory: React.FC = () => {
 };
 
 export default Inventory;
+
+

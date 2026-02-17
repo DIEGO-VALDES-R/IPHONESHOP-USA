@@ -19,6 +19,7 @@ const POS: React.FC = () => {
   const [lastSale, setLastSale] = useState<Sale | null>(null);
 
   // IVA Toggle
+  const defaultTaxRate = company?.config?.tax_rate ?? 19;
   const [applyIva, setApplyIva] = useState(true);
 
   // Datos cliente
@@ -41,7 +42,7 @@ const POS: React.FC = () => {
   const totals = useMemo(() => {
     const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
     const tax = applyIva
-      ? cart.reduce((acc, item) => acc + ((item.price * (item.tax_rate ?? 19) / 100) * item.quantity), 0)
+      ? cart.reduce((acc, item) => acc + ((item.price * (item.tax_rate ?? defaultTaxRate) / 100) * item.quantity), 0)
       : 0;
     const total = subtotal + tax;
     const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
@@ -176,8 +177,12 @@ const POS: React.FC = () => {
                 disabled={product.stock_quantity === 0 && product.type !== ProductType.SERVICE}
                 className="flex flex-col items-start text-left p-4 rounded-lg border border-slate-200 hover:border-blue-500 hover:shadow-md transition-all bg-white group disabled:opacity-50 disabled:bg-slate-50"
               >
-                <div className="w-full aspect-square bg-slate-100 rounded-md mb-3 flex items-center justify-center text-slate-300 group-hover:text-blue-400">
-                  <Smartphone size={40} />
+                <div className="w-full aspect-square bg-slate-100 rounded-md mb-3 flex items-center justify-center text-slate-300 group-hover:text-blue-400 overflow-hidden">
+                  {product.image_url ? (
+                    <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <Smartphone size={40} />
+                  )}
                 </div>
                 <h4 className="font-semibold text-slate-800 line-clamp-2">{product.name}</h4>
                 <p className="text-xs text-slate-500 mb-1">{product.sku}</p>
@@ -237,7 +242,7 @@ const POS: React.FC = () => {
               applyIva ? 'bg-green-50 border-green-400 text-green-700' : 'bg-slate-50 border-slate-300 text-slate-500'
             }`}
           >
-            <span>IVA 19%</span>
+            <span>IVA {defaultTaxRate}%</span>
             <div className={`w-10 h-5 rounded-full flex items-center transition-all px-0.5 ${applyIva ? 'bg-green-500 justify-end' : 'bg-slate-300 justify-start'}`}>
               <div className="w-4 h-4 bg-white rounded-full shadow" />
             </div>
@@ -249,7 +254,7 @@ const POS: React.FC = () => {
               <span>{formatMoney(totals.subtotal)}</span>
             </div>
             <div className={`flex justify-between ${applyIva ? 'text-slate-500' : 'text-slate-300'}`}>
-              <span>IVA (19%)</span>
+              <span>IVA ({defaultTaxRate}%)</span>
               <span>{applyIva ? formatMoney(totals.tax) : 'No aplica'}</span>
             </div>
             <div className="flex justify-between font-bold text-xl text-slate-800 mt-2 pt-2 border-t border-slate-200">
@@ -301,7 +306,7 @@ const POS: React.FC = () => {
                   <h4 className="text-sm font-bold text-slate-500 mb-2">Total a Pagar</h4>
                   <div className="text-3xl font-bold text-slate-800">{formatMoney(totals.total)}</div>
                   <div className={`text-xs mt-1 font-medium ${applyIva ? 'text-green-600' : 'text-slate-400'}`}>
-                    {applyIva ? 'IVA 19% incluido' : 'Sin IVA'}
+                    {applyIva ? "IVA ${defaultTaxRate}% incluido" : 'Sin IVA'}
                   </div>
                   <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
                     <h5 className="text-xs font-bold text-slate-500 uppercase mb-2">Pagos Agregados</h5>
@@ -363,3 +368,6 @@ const POS: React.FC = () => {
 };
 
 export default POS;
+
+
+
