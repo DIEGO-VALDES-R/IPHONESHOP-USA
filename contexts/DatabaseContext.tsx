@@ -110,15 +110,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const loadSession = async (cid: string) => {
-    const { data } = await supabase
-      .from('cash_register_sessions').select('*')
-      .eq('company_id', cid).eq('status', 'OPEN').single();
+    const [{ data }, { data: history }] = await Promise.all([
+      supabase.from('cash_register_sessions').select('*')
+        .eq('company_id', cid).eq('status', 'OPEN').maybeSingle(),
+      supabase.from('cash_register_sessions').select('*')
+        .eq('company_id', cid).eq('status', 'CLOSED')
+        .order('end_time', { ascending: false }).limit(10)
+    ]);
     setSession(data as any || null);
-
-    const { data: history } = await supabase
-      .from('cash_register_sessions').select('*')
-      .eq('company_id', cid).eq('status', 'CLOSED')
-      .order('end_time', { ascending: false }).limit(10);
     setSessionsHistory((history || []) as any);
   };
 
@@ -354,6 +353,7 @@ export const useDatabase = () => {
   if (!context) throw new Error('useDatabase must be used within DatabaseProvider');
   return context;
 };
+
 
 
 
