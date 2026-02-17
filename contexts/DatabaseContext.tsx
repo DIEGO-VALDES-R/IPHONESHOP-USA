@@ -238,7 +238,22 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await loadProducts(companyId);
 
     toast.success('Venta guardada en Supabase');
-    return invoice as any;
+    // Adjuntar items del carrito al objeto retornado para el InvoiceModal
+    const saleWithItems = {
+      ...invoice,
+      customer_name: saleData.customer,
+      customer_document: saleData.customerDoc,
+      customer_email: saleData.customerEmail,
+      customer_phone: saleData.customerPhone,
+      _cartItems: saleData.items.map((i: any) => ({
+        product_name: i.product?.name || i.name || 'Producto',
+        quantity: i.quantity,
+        price: i.product?.price ?? i.price,
+        tax_rate: i.product?.tax_rate ?? i.tax_rate ?? 19,
+        serial_number: i.serial_number,
+      })),
+    };
+    return saleWithItems as any;
   };
 
   // ── COMPANY ─────────────────────────────────────────────────────────────
@@ -308,3 +323,4 @@ export const useDatabase = () => {
   if (!context) throw new Error('useDatabase must be used within DatabaseProvider');
   return context;
 };
+
