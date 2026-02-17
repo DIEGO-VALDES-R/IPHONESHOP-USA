@@ -177,8 +177,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const processSale = async (saleData: {
     customer: string, customerDoc?: string,
     customerEmail?: string, customerPhone?: string,
-    items: any[], total: number
-  }): Promise<Sale> => {
+    items: any[], total: number, applyIva?: boolean }): Promise<Sale> => {
     if (!companyId || !branchId) throw new Error('No company/branch');
 
     // Get next invoice number
@@ -187,8 +186,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       .eq('company_id', companyId);
     const invoiceNumber = `POS-${String((count || 0) + 1).padStart(6, '0')}`;
 
-    const subtotal = saleData.total / 1.19;
-    const taxAmount = saleData.total - subtotal;
+    const useIva = saleData.applyIva !== false;
+    const subtotal = useIva ? saleData.total / 1.19 : saleData.total;
+    const taxAmount = useIva ? saleData.total - subtotal : 0;
 
     // Create invoice
     const { data: invoice, error: invErr } = await supabase
@@ -323,4 +323,5 @@ export const useDatabase = () => {
   if (!context) throw new Error('useDatabase must be used within DatabaseProvider');
   return context;
 };
+
 

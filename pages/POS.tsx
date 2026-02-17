@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+﻿import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Smartphone, X, Check, Printer, Barcode } from 'lucide-react';
 import { Product, ProductType, CartItem, PaymentMethod, Sale } from '../types';
 import { toast, Toaster } from 'react-hot-toast';
@@ -21,6 +21,9 @@ const POS: React.FC = () => {
   // Invoice State
   const [showInvoice, setShowInvoice] = useState(false);
   const [lastSale, setLastSale] = useState<Sale | null>(null);
+
+  // IVA Toggle
+  const [applyIva, setApplyIva] = React.useState(true);
 
   // Customer State
   const [customerName, setCustomerName] = useState('');
@@ -105,7 +108,7 @@ const POS: React.FC = () => {
         
         const exists = cart.find(item => item.product.id === product.id && item.serial_number === serial);
         if (exists) {
-            toast.error("Este serial ya está en el carrito");
+            toast.error("Este serial ya estÃ¡ en el carrito");
             return;
         }
 
@@ -154,7 +157,7 @@ const POS: React.FC = () => {
 
     // Check stock for increase
     if (delta > 0 && item.quantity >= item.product.stock_quantity && item.product.type !== ProductType.SERVICE) {
-       toast.error("Stock máximo alcanzado");
+       toast.error("Stock mÃ¡ximo alcanzado");
        return;
     }
 
@@ -260,7 +263,7 @@ const POS: React.FC = () => {
             <input 
               ref={searchInputRef}
               type="text"
-              placeholder="Escanear Código de Barras / SKU / IMEI..."
+              placeholder="Escanear CÃ³digo de Barras / SKU / IMEI..."
               className="w-full pl-10 pr-12 py-3 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -320,7 +323,7 @@ const POS: React.FC = () => {
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400">
               <ShoppingCart size={48} className="mb-2 opacity-20" />
-              <p>El carrito está vacío</p>
+              <p>El carrito estÃ¡ vacÃ­o</p>
             </div>
           ) : (
             cart.map((item, idx) => (
@@ -417,7 +420,7 @@ const POS: React.FC = () => {
                     />
                  </div>
                  <div className="col-span-1">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Teléfono (WhatsApp)</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">TelÃ©fono (WhatsApp)</label>
                     <input 
                         type="tel" 
                         className="w-full border border-slate-300 rounded-lg px-4 py-2" 
@@ -458,7 +461,7 @@ const POS: React.FC = () => {
                   </div>
 
                   <div className="flex-1 space-y-4">
-                    <h4 className="text-sm font-bold text-slate-500">Agregar Método</h4>
+                    <h4 className="text-sm font-bold text-slate-500">Agregar MÃ©todo</h4>
                     <div className="grid grid-cols-2 gap-2">
                         {[PaymentMethod.CASH, PaymentMethod.CARD, PaymentMethod.TRANSFER, PaymentMethod.CREDIT].map(m => (
                             <button 
@@ -466,7 +469,7 @@ const POS: React.FC = () => {
                                 onClick={() => setCurrentPaymentMethod(m)}
                                 className={`py-2 px-3 rounded-lg border text-sm font-medium transition-all ${currentPaymentMethod === m ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-400'}`}
                             >
-                                {m === 'CASH' ? 'Efectivo' : m === 'CARD' ? 'Tarjeta' : m === 'CREDIT' ? 'Crédito' : 'Transf.'}
+                                {m === 'CASH' ? 'Efectivo' : m === 'CARD' ? 'Tarjeta' : m === 'CREDIT' ? 'CrÃ©dito' : 'Transf.'}
                             </button>
                         ))}
                     </div>

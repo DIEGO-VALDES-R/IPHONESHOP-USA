@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+﻿import React, { useState, useRef } from 'react';
 import { Save, Building, Receipt, Shield, Mail, Check, X, CreditCard, Upload, Image as ImageIcon, Lock, KeyRound, FileCode, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { toast } from 'react-hot-toast';
@@ -8,16 +8,16 @@ import { DianEnvironment, DianSettings } from '../types';
 const PLANS = [
     {
         id: 'BASIC',
-        name: 'Plan Básico',
+        name: 'Plan BÃ¡sico',
         price: 'Gratis',
-        features: ['1 Usuario', '1 Sucursal', 'POS Básico', 'Hasta 100 Productos'],
+        features: ['1 Usuario', '1 Sucursal', 'POS BÃ¡sico', 'Hasta 100 Productos'],
         color: 'bg-slate-100 border-slate-200'
     },
     {
         id: 'PRO',
         name: 'Plan Profesional',
         price: '$29.99 / mes',
-        features: ['5 Usuarios', '3 Sucursales', 'Facturación Electrónica', 'Reportes Avanzados', 'Soporte Prioritario'],
+        features: ['5 Usuarios', '3 Sucursales', 'FacturaciÃ³n ElectrÃ³nica', 'Reportes Avanzados', 'Soporte Prioritario'],
         color: 'bg-blue-50 border-blue-200 ring-2 ring-blue-500'
     },
     {
@@ -127,7 +127,7 @@ const Settings: React.FC = () => {
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
         <div>
-            <h2 className="text-2xl font-bold text-slate-800">Configuración</h2>
+            <h2 className="text-2xl font-bold text-slate-800">ConfiguraciÃ³n</h2>
             <p className="text-slate-500">Administra los datos de tu empresa</p>
         </div>
         <div className="flex bg-white rounded-lg p-1 border border-slate-200">
@@ -141,7 +141,7 @@ const Settings: React.FC = () => {
                 onClick={() => setActiveTab('DIAN')}
                 className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${activeTab === 'DIAN' ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
             >
-                <FileCode size={16} /> Facturación Electrónica
+                <FileCode size={16} /> FacturaciÃ³n ElectrÃ³nica
             </button>
         </div>
       </div>
@@ -181,11 +181,11 @@ const Settings: React.FC = () => {
                         <input type="text" className="w-full px-3 py-2 border rounded-lg" value={formData.nit} onChange={e => setFormData({...formData, nit: e.target.value})} />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Teléfono</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">TelÃ©fono</label>
                         <input type="text" className="w-full px-3 py-2 border rounded-lg" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
                     </div>
                     <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Dirección</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">DirecciÃ³n</label>
                         <input type="text" className="w-full px-3 py-2 border rounded-lg" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
                     </div>
                 </div>
@@ -197,10 +197,10 @@ const Settings: React.FC = () => {
                     <div className="flex justify-between items-start mb-6">
                         <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
                             <Receipt size={20} className="text-blue-600" />
-                            Configuración Técnica DIAN
+                            ConfiguraciÃ³n TÃ©cnica DIAN
                         </h3>
                         <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-slate-700">Habilitar Facturación</label>
+                            <label className="text-sm font-medium text-slate-700">Habilitar FacturaciÃ³n</label>
                             <button 
                                 type="button"
                                 onClick={() => setDianForm({...dianForm, is_active: !dianForm.is_active})}
@@ -219,8 +219,8 @@ const Settings: React.FC = () => {
                                 value={dianForm.environment}
                                 onChange={e => setDianForm({...dianForm, environment: e.target.value as DianEnvironment})}
                              >
-                                 <option value={DianEnvironment.TEST}>Pruebas / Habilitación</option>
-                                 <option value={DianEnvironment.PRODUCTION}>Producción</option>
+                                 <option value={DianEnvironment.TEST}>Pruebas / HabilitaciÃ³n</option>
+                                 <option value={DianEnvironment.PRODUCTION}>ProducciÃ³n</option>
                              </select>
                         </div>
                          <div>
@@ -236,7 +236,7 @@ const Settings: React.FC = () => {
                              <input type="password" className="w-full px-3 py-2 border rounded-lg font-mono text-sm" value={dianForm.software_pin} onChange={e => setDianForm({...dianForm, software_pin: e.target.value})} />
                         </div>
                         <div className="md:col-span-2">
-                             <label className="block text-sm font-medium text-slate-700 mb-1">Clave Técnica (Resolución)</label>
+                             <label className="block text-sm font-medium text-slate-700 mb-1">Clave TÃ©cnica (ResoluciÃ³n)</label>
                              <input type="text" className="w-full px-3 py-2 border rounded-lg font-mono text-sm" value={dianForm.technical_key} onChange={e => setDianForm({...dianForm, technical_key: e.target.value})} />
                         </div>
                         <div className="md:col-span-2 border-t border-slate-100 pt-4 mt-2">
@@ -245,11 +245,11 @@ const Settings: React.FC = () => {
                                 <button type="button" onClick={() => certInputRef.current?.click()} className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 flex items-center gap-2">
                                     <Upload size={16}/> Seleccionar Archivo
                                 </button>
-                                <span className="text-sm text-slate-500 italic">{dianForm.certificate_url || 'Ningún archivo seleccionado'}</span>
+                                <span className="text-sm text-slate-500 italic">{dianForm.certificate_url || 'NingÃºn archivo seleccionado'}</span>
                                 <input ref={certInputRef} type="file" accept=".p12" className="hidden" onChange={handleCertUpload} />
                             </div>
                             <div className="mt-3">
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Contraseña Certificado</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">ContraseÃ±a Certificado</label>
                                 <input type="password" className="w-full px-3 py-2 border rounded-lg" value={dianForm.certificate_password || ''} onChange={e => setDianForm({...dianForm, certificate_password: e.target.value})} />
                             </div>
                         </div>
@@ -259,9 +259,9 @@ const Settings: React.FC = () => {
                   <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex gap-3">
                       <AlertTriangle className="text-blue-600 flex-shrink-0" />
                       <div>
-                          <h4 className="font-bold text-blue-800 text-sm">Información Importante</h4>
+                          <h4 className="font-bold text-blue-800 text-sm">InformaciÃ³n Importante</h4>
                           <p className="text-xs text-blue-700 mt-1">
-                              Al activar el entorno de PRODUCCIÓN, todas las facturas generadas serán enviadas automáticamente a la DIAN. Asegúrese de haber completado las pruebas de habilitación exitosamente (Set de Pruebas).
+                              Al activar el entorno de PRODUCCIÃ“N, todas las facturas generadas serÃ¡n enviadas automÃ¡ticamente a la DIAN. AsegÃºrese de haber completado las pruebas de habilitaciÃ³n exitosamente (Set de Pruebas).
                           </p>
                       </div>
                   </div>
@@ -293,14 +293,14 @@ const Settings: React.FC = () => {
                </div>
              </div>
              <button type="button" onClick={() => setIsSecurityCheckOpen(true)} className="w-full py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 relative z-10">
-               <Lock size={16} /> Gestionar Suscripción
+               <Lock size={16} /> Gestionar SuscripciÃ³n
              </button>
              <p className="text-[10px] text-slate-500 text-center mt-2 relative z-10">* Requiere Clave Maestra (Demo: {MASTER_KEY})</p>
           </div>
           
           <button type="submit" className="w-full py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 shadow-lg shadow-green-900/10 flex items-center justify-center gap-2">
             <Save size={20} />
-            {activeTab === 'GENERAL' ? 'Guardar Cambios' : 'Guardar Configuración DIAN'}
+            {activeTab === 'GENERAL' ? 'Guardar Cambios' : 'Guardar ConfiguraciÃ³n DIAN'}
           </button>
         </div>
       </form>
@@ -312,7 +312,7 @@ const Settings: React.FC = () => {
                 <div className="bg-slate-900 p-6 text-white text-center">
                     <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-3"><Lock size={32} className="text-blue-400" /></div>
                     <h3 className="font-bold text-lg">Acceso Restringido</h3>
-                    <p className="text-xs text-slate-400">Esta zona requiere autorización del administrador.</p>
+                    <p className="text-xs text-slate-400">Esta zona requiere autorizaciÃ³n del administrador.</p>
                 </div>
                 <form onSubmit={handleVerifyMasterKey} className="p-6">
                     <div className="mb-4">
@@ -338,7 +338,7 @@ const Settings: React.FC = () => {
              <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in fade-in zoom-in duration-200">
                  <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50">
                     <div>
-                        <h3 className="font-bold text-2xl text-slate-800">Planes de Suscripción</h3>
+                        <h3 className="font-bold text-2xl text-slate-800">Planes de SuscripciÃ³n</h3>
                         <p className="text-slate-500 text-sm">Escoge el plan ideal para tu negocio</p>
                     </div>
                     <button onClick={() => setIsSubscriptionModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={24} className="text-slate-500" /></button>
