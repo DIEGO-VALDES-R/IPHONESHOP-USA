@@ -34,9 +34,12 @@ const POS: React.FC = () => {
   const [currentPaymentMethod, setCurrentPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
 
   const filteredProducts = useMemo(() =>
-    products.filter(p => ((p.stock_quantity ?? 0) > 0 || p.type === 'SERVICE') &&
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchTerm.toLowerCase())
+    products.filter(p =>
+      ((p.stock_quantity ?? 0) > 0 || p.type === 'SERVICE') &&
+      (
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.sku.toLowerCase().includes(searchTerm.toLowerCase())
+      )
     ), [searchTerm, products]);
 
   const totals = useMemo(() => {
