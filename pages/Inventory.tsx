@@ -1,8 +1,9 @@
-﻿import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, X, Package } from 'lucide-react';
+﻿import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Search, Edit2, Trash2, X, Package, Upload, Image as ImageIcon } from 'lucide-react';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { productService, Product } from '../services/productService';
 import { useCompany } from '../hooks/useCompany';
+import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 
 const EMPTY_PRODUCT = {
@@ -22,6 +23,8 @@ const Inventory: React.FC = () => {
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState(EMPTY_PRODUCT);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     if (!companyId) return;
@@ -45,6 +48,28 @@ const Inventory: React.FC = () => {
     setShowModal(true);
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    if (!file.type.startsWith('image/')) { toast.error('Solo se permiten imágenes'); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error('La imagen no puede superar 5MB'); return; }
+    setUploading(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const fileName = `${companyId}-${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from('product-images').upload(fileName, file, { upsert: true });
+      if (error) throw error;
+      const { data } = supabase.storage.from('product-images').getPublicUrl(fileName);
+      setForm((prev: any) => ({ ...prev, image_url: data.publicUrl }));
+      toast.success('Imagen subida correctamente');
+    } catch (err: any) {
+      toast.error('Error al subir imagen: ' + err.message);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleSave = async () => {
     if (!form.name || !form.sku) { toast.error('Nombre y SKU son requeridos'); return; }
     setSaving(true);
@@ -62,7 +87,7 @@ const Inventory: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Eliminar este producto?')) return;
+    if (!confirm('Eliminar este producto?')) return;
     try { await productService.delete(id); toast.success('Eliminado'); load(); }
     catch (e: any) { toast.error(e.message); }
   };
@@ -83,7 +108,7 @@ const Inventory: React.FC = () => {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Inventario</h2>
-          <p className="text-slate-500">Gestión de productos y stock</p>
+          <p className="text-slate-500">Gestion de productos y stock</p>
         </div>
         <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm">
           <Plus size={16} /> Nuevo Producto
@@ -93,7 +118,7 @@ const Inventory: React.FC = () => {
       <div className="relative">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar por nombre, SKU o categoría..."
+          placeholder="Buscar por nombre, SKU o categoria..."
           className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
       </div>
 
@@ -108,7 +133,7 @@ const Inventory: React.FC = () => {
         ) : (
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>{['Foto','Producto','SKU','Categoría','Precio','Costo','Stock','Tipo',''].map(h => (
+              <tr>{['Foto','Producto','SKU','Categoria','Precio','Costo','Stock','Tipo',''].map(h => (
                 <th key={h} className="px-4 py-4 font-semibold text-slate-700">{h}</th>
               ))}</tr>
             </thead>
@@ -157,6 +182,46 @@ const Inventory: React.FC = () => {
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
+
+                {/* FOTO DEL PRODUCTO */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Foto del Producto</label>
+                  <div className="flex items-center gap-4">
+                    <div className="w-24 h-24 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden bg-slate-50 flex-shrink-0">
+                      {(form as any).image_url ? (
+                        <img src={(form as any).image_url} alt="preview" className="w-full h-full object-cover" />
+                      ) : (
+                        <ImageIcon size={28} className="text-slate-300" />
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-blue-400 transition-all disabled:opacity-50"
+                      >
+                        {uploading ? (
+                          <><div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /> Subiendo...</>
+                        ) : (
+                          <><Upload size={16} /> Subir imagen</>
+                        )}
+                      </button>
+                      {(form as any).image_url && (
+                        <button
+                          type="button"
+                          onClick={() => setForm((prev: any) => ({ ...prev, image_url: '' }))}
+                          className="w-full px-4 py-2 text-xs text-red-500 hover:bg-red-50 rounded-lg border border-red-200"
+                        >
+                          Quitar imagen
+                        </button>
+                      )}
+                      <p className="text-xs text-slate-400">JPG, PNG, WEBP · Max 5MB</p>
+                    </div>
+                  </div>
+                  <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                </div>
+
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Nombre *</label>
                   <input value={form.name} onChange={f('name')} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
@@ -168,7 +233,7 @@ const Inventory: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
                   <select value={form.type} onChange={f('type')} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="STANDARD">Estándar</option>
+                    <option value="STANDARD">Estandar</option>
                     <option value="SERIALIZED">Serializado</option>
                     <option value="SERVICE">Servicio</option>
                   </select>
@@ -182,7 +247,7 @@ const Inventory: React.FC = () => {
                   <input type="number" value={form.cost} onChange={f('cost')} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Categoría</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
                   <input value={form.category || ''} onChange={f('category')} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
@@ -194,42 +259,19 @@ const Inventory: React.FC = () => {
                   <input type="number" value={form.stock_quantity || 0} onChange={f('stock_quantity')} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Stock Mínimo</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Stock Minimo</label>
                   <input type="number" value={form.stock_min || 5} onChange={f('stock_min')} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Descripción</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Descripcion</label>
                   <textarea value={form.description || ''} onChange={f('description')} rows={2}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
                 </div>
-
-                {/* CAMPO IMAGEN */}
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">URL de Imagen (foto del producto)</label>
-                  <input
-                    value={(form as any).image_url || ''}
-                    onChange={f('image_url')}
-                    placeholder="https://ejemplo.com/foto-producto.jpg"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  {(form as any).image_url && (
-                    <div className="mt-2 flex items-center gap-3">
-                      <img
-                        src={(form as any).image_url}
-                        alt="Vista previa"
-                        className="h-20 w-20 object-cover rounded-lg border border-slate-200"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                      />
-                      <p className="text-xs text-slate-400">Vista previa de la imagen</p>
-                    </div>
-                  )}
-                </div>
-
               </div>
             </div>
             <div className="flex gap-3 p-6 pt-0">
               <button onClick={() => setShowModal(false)} className="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 font-medium">Cancelar</button>
-              <button onClick={handleSave} disabled={saving} className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50">
+              <button onClick={handleSave} disabled={saving || uploading} className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50">
                 {saving ? 'Guardando...' : editing ? 'Actualizar' : 'Crear Producto'}
               </button>
             </div>
