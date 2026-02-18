@@ -92,11 +92,16 @@ const Inventory: React.FC = () => {
     catch (e: any) { toast.error(e.message); }
   };
 
-  const filtered = products.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.sku.toLowerCase().includes(search.toLowerCase()) ||
-    (p.category || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = products.filter(p => {
+    // Ocultar productos agotados (stock 0), excepto servicios
+    if (p.type !== 'SERVICE' && (p.stock_quantity ?? 0) <= 0) return false;
+    // Filtro de búsqueda
+    return (
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.sku.toLowerCase().includes(search.toLowerCase()) ||
+      (p.category || '').toLowerCase().includes(search.toLowerCase())
+    );
+  });
 
   const f = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const val = e.target.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value;
