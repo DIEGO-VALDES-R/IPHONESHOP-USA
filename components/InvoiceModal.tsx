@@ -140,12 +140,12 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
           <div className="text-center mb-6">
             {/* LOGO DE EMPRESA */}
             {company?.logo_url && (
-              <div className="flex justify-center mb-3">
+              <div className="flex justify-center mb-4">
                 <img
                   src={company.logo_url}
                   alt="Logo"
-                  className="h-16 w-auto object-contain"
-                  style={{ maxWidth: '120px' }}
+                  className="w-auto object-contain"
+                  style={{ height: '90px', maxWidth: '220px' }}
                 />
               </div>
             )}

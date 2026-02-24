@@ -22,7 +22,7 @@ interface DatabaseContextType extends DatabaseState {
   deleteProduct: (id: string) => Promise<void>;
   addRepair: (repair: Omit<RepairOrder, 'id'>) => Promise<void>;
   updateRepairStatus: (id: string, status: RepairStatus) => Promise<void>;
-  processSale: (saleData: { customer: string, customerDoc?: string, customerEmail?: string, customerPhone?: string, items: any[], total: number }) => Promise<Sale>;
+  processSale: (saleData: { customer: string, customerDoc?: string, customerEmail?: string, customerPhone?: string, items: any[], total: number, applyIva?: boolean }) => Promise<Sale>;
   updateCompanyConfig: (data: Partial<Company>) => Promise<void>;
   saveDianSettings: (settings: DianSettings) => void;
   openSession: (amount: number) => Promise<void>;
@@ -44,7 +44,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [sessionsHistory, setSessionsHistory] = useState<CashRegisterSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ── BOOTSTRAP: get user profile → company ──────────────────────────────
+  // ── BOOTSTRAP ──────────────────────────────────────────────────────────
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -109,15 +109,24 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setCustomers((data || []) as any);
   };
 
+  // ── CARGA DE SESIÓN — ordenado por created_at para evitar nulls en end_time ──
   const loadSession = async (cid: string) => {
-    const [{ data }, { data: history }] = await Promise.all([
-      supabase.from('cash_register_sessions').select('*')
-        .eq('company_id', cid).eq('status', 'OPEN').maybeSingle(),
-      supabase.from('cash_register_sessions').select('*')
-        .eq('company_id', cid).eq('status', 'CLOSED')
-        .order('end_time', { ascending: false }).limit(10)
+    const [{ data: openSession }, { data: history }] = await Promise.all([
+      supabase
+        .from('cash_register_sessions')
+        .select('*')
+        .eq('company_id', cid)
+        .eq('status', 'OPEN')
+        .maybeSingle(),
+      supabase
+        .from('cash_register_sessions')
+        .select('*')
+        .eq('company_id', cid)
+        .eq('status', 'CLOSED')
+        .order('created_at', { ascending: false })
+        .limit(20),
     ]);
-    setSession(data as any || null);
+    setSession(openSession as any || null);
     setSessionsHistory((history || []) as any);
   };
 
@@ -176,19 +185,20 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const processSale = async (saleData: {
     customer: string, customerDoc?: string,
     customerEmail?: string, customerPhone?: string,
-    items: any[], total: number, applyIva?: boolean }): Promise<Sale> => {
+    items: any[], total: number, applyIva?: boolean
+  }): Promise<Sale> => {
     if (!companyId || !branchId) throw new Error('No company/branch');
 
-    // Get next invoice number
+    // Número de factura único con timestamp + random
     const timestamp = Date.now().toString().slice(-6);
-const random = Math.floor(Math.random() * 100).toString().padStart(2, '0');
-const invoiceNumber = `POS-${timestamp}${random}`;
+    const random = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+    const invoiceNumber = `POS-${timestamp}${random}`;
 
     const useIva = saleData.applyIva !== false;
     const subtotal = useIva ? saleData.total / 1.19 : saleData.total;
     const taxAmount = useIva ? saleData.total - subtotal : 0;
 
-    // Create invoice
+    // Crear factura
     const { data: invoice, error: invErr } = await supabase
       .from('invoices').insert({
         company_id: companyId,
@@ -204,39 +214,63 @@ const invoiceNumber = `POS-${timestamp}${random}`;
 
     if (invErr) throw invErr;
 
-    // Create invoice items
-    const items = saleData.items.map((i: any) => ({
+    // Crear items de factura
+    const invoiceItems = saleData.items.map((i: any) => ({
       invoice_id: invoice.id,
       product_id: i.product.id,
       quantity: i.quantity,
       price: i.product.price,
       tax_rate: i.product.tax_rate || 19,
     }));
-    await supabase.from('invoice_items').insert(items);
+    await supabase.from('invoice_items').insert(invoiceItems);
 
-    // Decrement stock
+    // ── DESCONTAR STOCK ──
     for (const i of saleData.items) {
-      const { data: p } = await supabase
-        .from('products').select('stock_quantity').eq('id', i.product.id).single();
-      if (p) {
-        await supabase.from('products')
-          .update({ stock_quantity: Math.max(0, p.stock_quantity - i.quantity) })
-          .eq('id', i.product.id);
+      if (i.product.type === 'SERVICE') continue;
+
+      const { data: currentProduct, error: fetchErr } = await supabase
+        .from('products')
+        .select('stock_quantity')
+        .eq('id', i.product.id)
+        .single();
+
+      if (fetchErr || !currentProduct) {
+        console.warn(`No se pudo obtener stock del producto ${i.product.id}`);
+        continue;
+      }
+
+      const currentStock = currentProduct.stock_quantity ?? 0;
+      const newStock = Math.max(0, currentStock - i.quantity);
+
+      const { error: updateErr } = await supabase
+        .from('products')
+        .update({ stock_quantity: newStock })
+        .eq('id', i.product.id);
+
+      if (updateErr) {
+        console.error(`Error al descontar stock de ${i.product.name}:`, updateErr);
       }
     }
 
-    // Update session totals
+    // ── ACTUALIZAR TOTALES DE SESIÓN DE CAJA ──
     if (session?.id) {
-      await supabase.from('cash_register_sessions')
-        .update({ total_sales_cash: (session.total_sales_cash || 0) + saleData.total })
+      const newTotal = (session.total_sales_cash || 0) + saleData.total;
+      await supabase
+        .from('cash_register_sessions')
+        .update({ total_sales_cash: newTotal })
         .eq('id', session.id);
     }
 
-    await loadSales(companyId);
-    await loadProducts(companyId);
+    // ── REFRESCAR TODO EL ESTADO LOCAL EN PARALELO ──
+    await Promise.all([
+      loadProducts(companyId),
+      loadSales(companyId),
+      loadSession(companyId),  // ← recarga sesión y historial actualizados
+    ]);
 
-    toast.success('Venta guardada en Supabase');
-    // Adjuntar items del carrito al objeto retornado para el InvoiceModal
+    toast.success('Venta guardada correctamente');
+
+    // Retornar venta con items del carrito para el InvoiceModal
     const saleWithItems = {
       ...invoice,
       customer_name: saleData.customer,
@@ -272,7 +306,6 @@ const invoiceNumber = `POS-${timestamp}${random}`;
   const openSession = async (amount: number) => {
     if (!companyId) return;
 
-    // Buscar caja existente
     let registerId: string | null = null;
     const { data: register } = await supabase
       .from('cash_registers')
@@ -284,7 +317,6 @@ const invoiceNumber = `POS-${timestamp}${random}`;
     if (register) {
       registerId = register.id;
     } else {
-      // Crear caja principal si no existe
       const { data: newReg, error: regErr } = await supabase
         .from('cash_registers')
         .insert({ company_id: companyId, branch_id: branchId, name: 'Caja Principal', status: 'CLOSED' })
@@ -314,18 +346,30 @@ const invoiceNumber = `POS-${timestamp}${random}`;
 
   const closeSession = async (endAmount: number) => {
     if (!session?.id || !companyId) return;
-    const expectedCash = session.start_cash + (session.total_sales_cash || 0);
+
+    // Leer totales frescos desde Supabase para calcular diferencia correcta
+    const { data: currentSession } = await supabase
+      .from('cash_register_sessions')
+      .select('start_cash, total_sales_cash')
+      .eq('id', session.id)
+      .single();
+
+    const startCash = currentSession?.start_cash ?? session.start_cash;
+    const totalSales = currentSession?.total_sales_cash ?? session.total_sales_cash ?? 0;
+    const expectedCash = startCash + totalSales;
     const diff = endAmount - expectedCash;
+
     const { error } = await supabase
       .from('cash_register_sessions')
       .update({
         status: 'CLOSED',
         end_time: new Date().toISOString(),
         end_cash: endAmount,
-        difference: diff
+        difference: diff,
       })
       .eq('id', session.id)
       .eq('company_id', companyId);
+
     if (error) { console.error('closeSession error:', error); toast.error(error.message); return; }
     await loadSession(companyId);
     toast.success('Turno cerrado correctamente');
@@ -352,8 +396,3 @@ export const useDatabase = () => {
   if (!context) throw new Error('useDatabase must be used within DatabaseProvider');
   return context;
 };
-
-
-
-
-
