@@ -13,6 +13,12 @@ const EMPTY_PRODUCT = {
   image_url: '',
 };
 
+// Helper: convierte 0 a string vacío para mostrar placeholder en inputs numéricos
+const numVal = (val: number | undefined | null, fallback = 0): string => {
+  const v = val ?? fallback;
+  return v === 0 ? '' : String(v);
+};
+
 const Inventory: React.FC = () => {
   const { formatMoney } = useCurrency();
   const { companyId } = useCompany();
@@ -51,8 +57,21 @@ const Inventory: React.FC = () => {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
-    if (!file.type.startsWith('image/')) { toast.error('Solo se permiten imágenes'); return; }
+
+    // Validar tipo — incluye HEIF/HEIC
+    const validTypes = [
+      'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+      'image/heic', 'image/heif', 'image/avif',
+    ];
+    const isValidByType = validTypes.includes(file.type.toLowerCase());
+    const isValidByExt = /\.(jpg|jpeg|png|webp|gif|heic|heif|avif)$/i.test(file.name);
+    if (!isValidByType && !isValidByExt) {
+      toast.error('Solo se permiten imágenes (JPG, PNG, WEBP, HEIF, AVIF)');
+      return;
+    }
+
     if (file.size > 5 * 1024 * 1024) { toast.error('La imagen no puede superar 5MB'); return; }
+
     setUploading(true);
     try {
       const ext = file.name.split('.').pop();
@@ -87,15 +106,13 @@ const Inventory: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Eliminar este producto?')) return;
+    if (!confirm('¿Eliminar este producto?')) return;
     try { await productService.delete(id); toast.success('Eliminado'); load(); }
     catch (e: any) { toast.error(e.message); }
   };
 
   const filtered = products.filter(p => {
-    // Ocultar productos agotados (stock 0), excepto servicios
     if (p.type !== 'SERVICE' && (p.stock_quantity ?? 0) <= 0) return false;
-    // Filtro de búsqueda
     return (
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.sku.toLowerCase().includes(search.toLowerCase()) ||
@@ -103,9 +120,19 @@ const Inventory: React.FC = () => {
     );
   });
 
+  // Helper para actualizar campos de texto/select
   const f = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const val = e.target.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value;
     setForm((prev: any) => ({ ...prev, [k]: val }));
+  };
+
+  // Helper para campos numéricos con campo vacío permitido
+  const handleNumChange = (key: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    setForm((prev: any) => ({
+      ...prev,
+      [key]: raw === '' ? 0 : parseFloat(raw) || 0,
+    }));
   };
 
   return (
@@ -113,7 +140,7 @@ const Inventory: React.FC = () => {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Inventario</h2>
-          <p className="text-slate-500">Gestion de productos y stock</p>
+          <p className="text-slate-500">Gestión de productos y stock</p>
         </div>
         <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm">
           <Plus size={16} /> Nuevo Producto
@@ -123,7 +150,7 @@ const Inventory: React.FC = () => {
       <div className="relative">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar por nombre, SKU o categoria..."
+          placeholder="Buscar por nombre, SKU o categoría..."
           className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
       </div>
 
@@ -138,7 +165,7 @@ const Inventory: React.FC = () => {
         ) : (
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>{['Foto','Producto','SKU','Categoria','Precio','Costo','Stock','Tipo',''].map(h => (
+              <tr>{['Foto','Producto','SKU','Categoría','Precio','Costo','Stock','Tipo',''].map(h => (
                 <th key={h} className="px-4 py-4 font-semibold text-slate-700">{h}</th>
               ))}</tr>
             </thead>
@@ -221,57 +248,100 @@ const Inventory: React.FC = () => {
                           Quitar imagen
                         </button>
                       )}
-                      <p className="text-xs text-slate-400">JPG, PNG, WEBP · Max 5MB</p>
+                      <p className="text-xs text-slate-400">JPG, PNG, WEBP, HEIF · Max 5MB</p>
                     </div>
                   </div>
-                  <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                  {/* Input acepta HEIC/HEIF también */}
+                  <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif" className="hidden" onChange={handleImageUpload} />
                 </div>
 
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Nombre *</label>
                   <input value={form.name} onChange={f('name')} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
+
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">SKU *</label>
                   <input value={form.sku} onChange={f('sku')} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
+
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
                   <select value={form.type} onChange={f('type')} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="STANDARD">Estandar</option>
+                    <option value="STANDARD">Estándar</option>
                     <option value="SERIALIZED">Serializado</option>
                     <option value="SERVICE">Servicio</option>
                   </select>
                 </div>
+
+                {/* PRECIO VENTA — sin 0 fijo */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Precio Venta</label>
-                  <input type="number" value={form.price} onChange={f('price')} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input
+                    type="number"
+                    min="0"
+                    value={numVal(form.price)}
+                    onChange={handleNumChange('price')}
+                    placeholder="0"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
+
+                {/* COSTO — sin 0 fijo */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Costo</label>
-                  <input type="number" value={form.cost} onChange={f('cost')} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input
+                    type="number"
+                    min="0"
+                    value={numVal(form.cost)}
+                    onChange={handleNumChange('cost')}
+                    placeholder="0"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Categoría</label>
                   <input value={form.category || ''} onChange={f('category')} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
+
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Marca</label>
                   <input value={(form as any).brand || ''} onChange={f('brand')} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
+
+                {/* STOCK INICIAL — sin 0 fijo */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Stock Inicial</label>
-                  <input type="number" value={form.stock_quantity || 0} onChange={f('stock_quantity')} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input
+                    type="number"
+                    min="0"
+                    value={numVal(form.stock_quantity)}
+                    onChange={handleNumChange('stock_quantity')}
+                    placeholder="0"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
+
+                {/* STOCK MÍNIMO — sin 5 fijo */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Stock Minimo</label>
-                  <input type="number" value={form.stock_min || 5} onChange={f('stock_min')} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Stock Mínimo</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={numVal(form.stock_min, 5)}
+                    onChange={handleNumChange('stock_min')}
+                    placeholder="5"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
+
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Descripcion</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Descripción</label>
                   <textarea value={form.description || ''} onChange={f('description')} rows={2}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
                 </div>
+
               </div>
             </div>
             <div className="flex gap-3 p-6 pt-0">

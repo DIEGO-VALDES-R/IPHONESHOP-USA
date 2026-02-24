@@ -37,6 +37,7 @@ interface CompanyData {
   address?: string;
   phone?: string;
   email?: string;
+  logo_url?: string;
   config?: {
     dian_resolution?: string;
     dian_date?: string;
@@ -100,8 +101,8 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
 
   const getStatusBadge = () => {
     const s = sale.status;
-    if (s === 'ACCEPTED')         return <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold flex items-center gap-1"><CheckCircle size={12}/> DIAN: ACEPTADA</span>;
-    if (s === 'REJECTED')         return <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded font-bold flex items-center gap-1"><XCircle size={12}/> DIAN: RECHAZADA</span>;
+    if (s === 'ACCEPTED')           return <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold flex items-center gap-1"><CheckCircle size={12}/> DIAN: ACEPTADA</span>;
+    if (s === 'REJECTED')           return <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded font-bold flex items-center gap-1"><XCircle size={12}/> DIAN: RECHAZADA</span>;
     if (s === 'PENDING_ELECTRONIC') return <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded font-bold flex items-center gap-1"><Clock size={12}/> PENDIENTE ENVÍO</span>;
     return null;
   };
@@ -137,6 +138,17 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
 
           {/* Empresa */}
           <div className="text-center mb-6">
+            {/* LOGO DE EMPRESA */}
+            {company?.logo_url && (
+              <div className="flex justify-center mb-3">
+                <img
+                  src={company.logo_url}
+                  alt="Logo"
+                  className="h-16 w-auto object-contain"
+                  style={{ maxWidth: '120px' }}
+                />
+              </div>
+            )}
             <h2 className="font-bold text-xl uppercase mb-1">{companyName}</h2>
             <p>NIT: {company?.nit ?? '—'}</p>
             <p>{company?.address ?? ''}</p>
@@ -229,6 +241,45 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
               <p className="text-[10px] text-amber-600">El CUFE se generará una vez la DIAN valide el documento.</p>
             </div>
           )}
+
+          {/* TÉRMINOS Y CONDICIONES DE GARANTÍA */}
+          <div className="mt-6 pt-4 border-t border-slate-300 text-[9px] text-slate-500 leading-tight space-y-3">
+            <p className="font-bold uppercase text-slate-700 text-[10px] text-center tracking-wide">
+              Términos y Condiciones de Garantía
+            </p>
+
+            <div>
+              <p className="font-bold text-slate-600 mb-0.5 uppercase text-[9px]">Condiciones de Recepción de Equipos</p>
+              <p>• No se reciben equipos destapados o con sellos de garantía violados</p>
+              <p>• No se reciben equipos que no enciendan al momento de la recepción</p>
+              <p>• No se reciben equipos con humedad, corrosión o daño por líquidos</p>
+              <p>• No se reciben equipos con golpes o daños físicos no reportados al momento de la compra</p>
+            </div>
+
+            <div>
+              <p className="font-bold text-slate-600 mb-0.5 uppercase text-[9px]">Exclusiones de Garantía</p>
+              <p>• Pantallas (Display) y vidrios no tienen cobertura de garantía</p>
+              <p>• Daños ocasionados por mal uso, caídas o golpes</p>
+              <p>• Daños por líquidos o humedad</p>
+              <p>• Equipos que hayan sido intervenidos por terceros no autorizados</p>
+              <p>• Accesorios (cables, audífonos, cargadores) tienen garantía de 30 días</p>
+              <p>• No se responde por extravío o hurto del equipo</p>
+              <p>• No se responde por bloqueo de iCloud o Activation Lock</p>
+              <p>• No se responde por equipos con reporte de robo ante operadores o autoridades</p>
+            </div>
+
+            <div>
+              <p className="font-bold text-slate-600 mb-0.5 uppercase text-[9px]">Proceso de Garantía</p>
+              <p>• El proceso de garantía tiene una duración de 8 días hábiles</p>
+              <p>• No se realizan devoluciones de dinero; se aplica cambio del producto o nota crédito</p>
+              <p>• El cliente debe presentar su factura original para hacer válida la garantía</p>
+              <p>• Los equipos deben entregarse con sus accesorios y empaque original</p>
+            </div>
+
+            <div className="pt-1 border-t border-slate-200 text-center">
+              <p className="font-bold text-slate-600">Contacto: 316-154 55 54 | WhatsApp disponible</p>
+            </div>
+          </div>
 
           <p className="text-xs font-bold mt-6 text-center">¡GRACIAS POR SU COMPRA!</p>
         </div>

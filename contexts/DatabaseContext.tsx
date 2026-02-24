@@ -180,10 +180,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!companyId || !branchId) throw new Error('No company/branch');
 
     // Get next invoice number
-    const { count } = await supabase
-      .from('invoices').select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId);
-    const invoiceNumber = `POS-${String((count || 0) + 1).padStart(6, '0')}`;
+    const timestamp = Date.now().toString().slice(-6);
+const random = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+const invoiceNumber = `POS-${timestamp}${random}`;
 
     const useIva = saleData.applyIva !== false;
     const subtotal = useIva ? saleData.total / 1.19 : saleData.total;
