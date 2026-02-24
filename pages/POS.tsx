@@ -44,10 +44,8 @@ const POS: React.FC = () => {
 
   const totals = useMemo(() => {
     const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-    // CORRECCIÓN: siempre usa defaultTaxRate, no el tax_rate del producto
-    const tax = applyIva
-      ? subtotal * (defaultTaxRate / 100)
-      : 0;
+    // CORRECCIÓN: cuando applyIva es true pero defaultTaxRate es 0, tax queda en 0
+    const tax = applyIva ? subtotal * (defaultTaxRate / 100) : 0;
     const total = subtotal + tax;
     const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
     const remaining = total - totalPaid;
@@ -115,13 +113,21 @@ const POS: React.FC = () => {
 
   const handleFinalizeSale = async () => {
     if (Math.abs(totals.remaining) > 100) { toast.error('Debe cubrir el total de la venta'); return; }
+
+    // CORRECCIÓN PRINCIPAL: enviar subtotal y taxAmount ya calculados por el POS
+    // para que DatabaseContext no los recalcule con 1.19 fijo
     const sale = await processSale({
       customer: customerName || 'Consumidor Final',
-      customerDoc, customerEmail, customerPhone,
+      customerDoc,
+      customerEmail,
+      customerPhone,
       items: cart,
       total: totals.total,
+      subtotal: totals.subtotal,   // ← NUEVO: subtotal real del POS
+      taxAmount: totals.tax,       // ← NUEVO: tax real del POS (0 si IVA apagado)
       applyIva,
     });
+
     setLastSale(sale);
     setShowInvoice(true);
     setCart([]); setPayments([]);
@@ -243,11 +249,13 @@ const POS: React.FC = () => {
           <button
             onClick={() => setApplyIva(!applyIva)}
             className={`w-full mb-3 py-2 px-4 rounded-lg text-sm font-medium border-2 transition-all flex items-center justify-between ${
-              applyIva ? 'bg-green-50 border-green-400 text-green-700' : 'bg-slate-50 border-slate-300 text-slate-500'
+              applyIva && defaultTaxRate > 0
+                ? 'bg-green-50 border-green-400 text-green-700'
+                : 'bg-slate-50 border-slate-300 text-slate-500'
             }`}
           >
-            <span>IVA {defaultTaxRate}%</span>
-            <div className={`w-10 h-5 rounded-full flex items-center transition-all px-0.5 ${applyIva ? 'bg-green-500 justify-end' : 'bg-slate-300 justify-start'}`}>
+            <span>IVA {applyIva ? defaultTaxRate : 0}%</span>
+            <div className={`w-10 h-5 rounded-full flex items-center transition-all px-0.5 ${applyIva && defaultTaxRate > 0 ? 'bg-green-500 justify-end' : 'bg-slate-300 justify-start'}`}>
               <div className="w-4 h-4 bg-white rounded-full shadow" />
             </div>
           </button>
@@ -257,9 +265,9 @@ const POS: React.FC = () => {
               <span>Subtotal</span>
               <span>{formatMoney(totals.subtotal)}</span>
             </div>
-            <div className={`flex justify-between ${applyIva ? 'text-slate-500' : 'text-slate-300'}`}>
-              <span>IVA ({defaultTaxRate}%)</span>
-              <span>{applyIva ? formatMoney(totals.tax) : 'No aplica'}</span>
+            <div className={`flex justify-between ${applyIva && defaultTaxRate > 0 ? 'text-slate-500' : 'text-slate-300'}`}>
+              <span>IVA ({applyIva ? defaultTaxRate : 0}%)</span>
+              <span>{applyIva && defaultTaxRate > 0 ? formatMoney(totals.tax) : '$ 0'}</span>
             </div>
             <div className="flex justify-between font-bold text-xl text-slate-800 mt-2 pt-2 border-t border-slate-200">
               <span>Total</span>
@@ -309,8 +317,8 @@ const POS: React.FC = () => {
                 <div className="flex-1">
                   <h4 className="text-sm font-bold text-slate-500 mb-2">Total a Pagar</h4>
                   <div className="text-3xl font-bold text-slate-800">{formatMoney(totals.total)}</div>
-                  <div className={`text-xs mt-1 font-medium ${applyIva ? 'text-green-600' : 'text-slate-400'}`}>
-                    {applyIva ? `IVA ${defaultTaxRate}% incluido` : 'Sin IVA'}
+                  <div className={`text-xs mt-1 font-medium ${applyIva && defaultTaxRate > 0 ? 'text-green-600' : 'text-slate-400'}`}>
+                    {applyIva && defaultTaxRate > 0 ? `IVA ${defaultTaxRate}% incluido` : 'Sin IVA'}
                   </div>
                   <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
                     <h5 className="text-xs font-bold text-slate-500 uppercase mb-2">Pagos Agregados</h5>

@@ -22,7 +22,17 @@ interface DatabaseContextType extends DatabaseState {
   deleteProduct: (id: string) => Promise<void>;
   addRepair: (repair: Omit<RepairOrder, 'id'>) => Promise<void>;
   updateRepairStatus: (id: string, status: RepairStatus) => Promise<void>;
-  processSale: (saleData: { customer: string, customerDoc?: string, customerEmail?: string, customerPhone?: string, items: any[], total: number, applyIva?: boolean }) => Promise<Sale>;
+  processSale: (saleData: {
+    customer: string;
+    customerDoc?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    items: any[];
+    total: number;
+    subtotal: number;
+    taxAmount: number;
+    applyIva?: boolean;
+  }) => Promise<Sale>;
   updateCompanyConfig: (data: Partial<Company>) => Promise<void>;
   saveDianSettings: (settings: DianSettings) => void;
   openSession: (amount: number) => Promise<void>;
@@ -44,7 +54,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [sessionsHistory, setSessionsHistory] = useState<CashRegisterSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ── BOOTSTRAP ──────────────────────────────────────────────────────────
+  // ── BOOTSTRAP ────────────────────────────────────────────────────────────
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -75,7 +85,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     init();
   }, []);
 
-  // ── LOADERS ─────────────────────────────────────────────────────────────
+  // ── LOADERS ──────────────────────────────────────────────────────────────
   const loadCompany = async (cid: string) => {
     const { data } = await supabase.from('companies').select('*').eq('id', cid).single();
     if (data) setCompany(data as any);
@@ -109,7 +119,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setCustomers((data || []) as any);
   };
 
-  // ── CARGA DE SESIÓN — ordenado por created_at para evitar nulls en end_time ──
   const loadSession = async (cid: string) => {
     const [{ data: openSession }, { data: history }] = await Promise.all([
       supabase
@@ -134,7 +143,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (companyId) await loadProducts(companyId);
   }, [companyId]);
 
-  // ── PRODUCTS ────────────────────────────────────────────────────────────
+  // ── PRODUCTS ─────────────────────────────────────────────────────────────
   const addProduct = async (data: Omit<Product, 'id' | 'company_id'>) => {
     if (!companyId) return;
     const { error } = await supabase.from('products').insert({
@@ -159,7 +168,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     toast.success('Producto eliminado');
   };
 
-  // ── REPAIRS ─────────────────────────────────────────────────────────────
+  // ── REPAIRS ──────────────────────────────────────────────────────────────
   const addRepair = async (data: Omit<RepairOrder, 'id'>) => {
     if (!companyId) return;
     const { error } = await supabase.from('repair_orders').insert({
@@ -181,32 +190,37 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     toast.success(`Estado actualizado a ${status}`);
   };
 
-  // ── SALES ───────────────────────────────────────────────────────────────
+  // ── SALES ─────────────────────────────────────────────────────────────────
   const processSale = async (saleData: {
-    customer: string, customerDoc?: string,
-    customerEmail?: string, customerPhone?: string,
-    items: any[], total: number, applyIva?: boolean
+    customer: string;
+    customerDoc?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    items: any[];
+    total: number;
+    subtotal: number;   // ← AHORA VIENE CALCULADO DESDE EL POS
+    taxAmount: number;  // ← AHORA VIENE CALCULADO DESDE EL POS
+    applyIva?: boolean;
   }): Promise<Sale> => {
     if (!companyId || !branchId) throw new Error('No company/branch');
 
-    // Número de factura único con timestamp + random
     const timestamp = Date.now().toString().slice(-6);
     const random = Math.floor(Math.random() * 100).toString().padStart(2, '0');
     const invoiceNumber = `POS-${timestamp}${random}`;
 
-    const useIva = saleData.applyIva !== false;
-    const subtotal = useIva ? saleData.total / 1.19 : saleData.total;
-    const taxAmount = useIva ? saleData.total - subtotal : 0;
+    // CORRECCIÓN PRINCIPAL: usar los valores YA calculados en el POS
+    // en vez de recalcular aquí con 1.19 fijo
+    const subtotal = Math.round(saleData.subtotal);
+    const taxAmount = Math.round(saleData.taxAmount);
 
-    // Crear factura
     const { data: invoice, error: invErr } = await supabase
       .from('invoices').insert({
         company_id: companyId,
         branch_id: branchId,
         invoice_number: invoiceNumber,
         customer_id: null,
-        subtotal: Math.round(subtotal),
-        tax_amount: Math.round(taxAmount),
+        subtotal,
+        tax_amount: taxAmount,
         total_amount: saleData.total,
         status: 'PENDING_ELECTRONIC',
         payment_method: { method: 'CASH', amount: saleData.total }
@@ -214,13 +228,13 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     if (invErr) throw invErr;
 
-    // Crear items de factura
+    // CORRECCIÓN: usar ?? en vez de || para que tax_rate 0 sea válido
     const invoiceItems = saleData.items.map((i: any) => ({
       invoice_id: invoice.id,
       product_id: i.product.id,
       quantity: i.quantity,
       price: i.product.price,
-      tax_rate: i.product.tax_rate || 19,
+      tax_rate: i.product.tax_rate ?? 0,
     }));
     await supabase.from('invoice_items').insert(invoiceItems);
 
@@ -261,18 +275,19 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         .eq('id', session.id);
     }
 
-    // ── REFRESCAR TODO EL ESTADO LOCAL EN PARALELO ──
     await Promise.all([
       loadProducts(companyId),
       loadSales(companyId),
-      loadSession(companyId),  // ← recarga sesión y historial actualizados
+      loadSession(companyId),
     ]);
 
     toast.success('Venta guardada correctamente');
 
-    // Retornar venta con items del carrito para el InvoiceModal
+    // CORRECCIÓN: pasar subtotal y tax_amount reales al modal
     const saleWithItems = {
       ...invoice,
+      subtotal,
+      tax_amount: taxAmount,
       customer_name: saleData.customer,
       customer_document: saleData.customerDoc,
       customer_email: saleData.customerEmail,
@@ -281,14 +296,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         product_name: i.product?.name || i.name || 'Producto',
         quantity: i.quantity,
         price: i.product?.price ?? i.price,
-        tax_rate: i.product?.tax_rate ?? i.tax_rate ?? 19,
+        tax_rate: i.product?.tax_rate ?? i.tax_rate ?? 0,
         serial_number: i.serial_number,
       })),
     };
     return saleWithItems as any;
   };
 
-  // ── COMPANY ─────────────────────────────────────────────────────────────
+  // ── COMPANY ──────────────────────────────────────────────────────────────
   const updateCompanyConfig = async (data: Partial<Company>) => {
     if (!companyId) return;
     const { error } = await supabase.from('companies').update(data).eq('id', companyId);
@@ -302,7 +317,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     toast.success('Configuración DIAN guardada (local)');
   };
 
-  // ── SESSION ─────────────────────────────────────────────────────────────
+  // ── SESSION ──────────────────────────────────────────────────────────────
   const openSession = async (amount: number) => {
     if (!companyId) return;
 
@@ -347,7 +362,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const closeSession = async (endAmount: number) => {
     if (!session?.id || !companyId) return;
 
-    // Leer totales frescos desde Supabase para calcular diferencia correcta
     const { data: currentSession } = await supabase
       .from('cash_register_sessions')
       .select('start_cash, total_sales_cash')

@@ -1,6 +1,13 @@
-﻿import React from 'react';
-import { X, Printer, QrCode, MessageCircle, Mail, CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
+﻿import React, { useRef, useState } from 'react';
+import {
+  X, Printer, QrCode, MessageCircle, Mail,
+  CheckCircle, XCircle, Clock, AlertTriangle,
+  Download, Loader
+} from 'lucide-react';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { supabase } from '../supabaseClient';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 interface SaleItem {
   product_name?: string;
@@ -55,76 +62,220 @@ interface InvoiceModalProps {
 
 const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, company }) => {
   const { formatMoney } = useCurrency();
+  const receiptRef = useRef<HTMLDivElement>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
   if (!isOpen || !sale) return null;
 
-  // Normalizar items — compatibilidad con datos Supabase y datos mock
   const items: SaleItem[] = (
-    sale._cartItems ||
-    sale.items ||
-    sale.invoice_items ||
-    []
+    sale._cartItems || sale.items || sale.invoice_items || []
   ).map((item: any) => ({
     product_name: item.product?.name || item.product_name || item.name || 'Producto',
     quantity: item.quantity || 1,
     price: item.price || 0,
-    tax_rate: item.tax_rate || 19,
+    tax_rate: item.tax_rate ?? 0,
     serial_number: item.serial_number,
     discount: item.discount || 0,
   }));
 
-  const subtotal = sale.subtotal
-    ?? items.reduce((acc, i) => acc + i.price * i.quantity, 0);
-
-  const taxAmount = sale.tax_amount
-    ?? items.reduce((acc, i) => acc + (i.price * (i.tax_rate / 100)) * i.quantity, 0);
-
+  // Usar directamente los valores guardados en la venta (ya calculados correctamente en el POS)
+  const subtotal = sale.subtotal != null ? sale.subtotal : items.reduce((acc, i) => acc + i.price * i.quantity, 0);
+  const taxAmount = sale.tax_amount != null ? sale.tax_amount : 0;
+  const showIva = taxAmount > 0;
   const companyName = company?.name ?? 'IPHONESHOP USA';
 
-  const handlePrint = () => window.print();
+  // Captura el elemento completo sin cortar por scroll
+  const captureFullElement = async (element: HTMLDivElement) => {
+    const originalHeight = element.style.height;
+    const originalMaxHeight = element.style.maxHeight;
+    const originalOverflow = element.style.overflow;
 
-  const handleWhatsApp = () => {
-    const msg = `Hola ${sale.customer_name || 'Cliente'}, tu factura ${sale.invoice_number} de ${companyName} por ${formatMoney(sale.total_amount)}. ¡Gracias!`;
-    const encoded = encodeURIComponent(msg);
-    const phone = sale.customer_phone?.replace(/\D/g, '');
-    const finalPhone = phone && phone.length === 10 ? `57${phone}` : phone;
-    window.open(finalPhone ? `https://wa.me/${finalPhone}?text=${encoded}` : `https://wa.me/?text=${encoded}`, '_blank');
+    element.style.height = element.scrollHeight + 'px';
+    element.style.maxHeight = 'none';
+    element.style.overflow = 'visible';
+
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    const canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      width: element.offsetWidth,
+      height: element.scrollHeight,
+      windowWidth: element.offsetWidth,
+      windowHeight: element.scrollHeight,
+      scrollY: 0,
+      scrollX: 0,
+    });
+
+    element.style.height = originalHeight;
+    element.style.maxHeight = originalMaxHeight;
+    element.style.overflow = originalOverflow;
+
+    return canvas;
   };
 
-  const handleEmail = () => {
-    const email = sale.customer_email;
-    const subject = encodeURIComponent(`Factura ${sale.invoice_number} - ${companyName}`);
-    const body = encodeURIComponent(`Hola ${sale.customer_name},\n\nGracias por tu compra.\nTotal: ${formatMoney(sale.total_amount)}\n\n${companyName}`);
-    const target = email || prompt('Ingrese el correo del cliente:');
-    if (target) window.location.href = `mailto:${target}?subject=${subject}&body=${body}`;
+  const generateAndUploadPdf = async (): Promise<string | null> => {
+    if (!receiptRef.current) return null;
+    try {
+      const canvas = await captureFullElement(receiptRef.current);
+      const imgData = canvas.toDataURL('image/png');
+      const pdfWidth = 80;
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pdfWidth, pdfHeight] });
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      const pdfBlob = pdf.output('blob');
+
+      const fileName = `facturas/${sale.invoice_number}-${Date.now()}.pdf`;
+      const { error: uploadError } = await supabase.storage
+        .from('invoices-pdf')
+        .upload(fileName, pdfBlob, { contentType: 'application/pdf', upsert: true });
+
+      if (uploadError) {
+        console.error('Error subiendo PDF:', uploadError);
+        return null;
+      }
+
+      const { data } = supabase.storage.from('invoices-pdf').getPublicUrl(fileName);
+      setPdfUrl(data.publicUrl);
+      return data.publicUrl;
+    } catch (err) {
+      console.error('Error generando PDF:', err);
+      return null;
+    }
   };
+
+  const handleDownloadPdf = async () => {
+    if (!receiptRef.current) return;
+    setGeneratingPdf(true);
+    try {
+      const canvas = await captureFullElement(receiptRef.current);
+      const imgData = canvas.toDataURL('image/png');
+      const pdfWidth = 80;
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pdfWidth, pdfHeight] });
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Factura-${sale.invoice_number}.pdf`);
+    } catch (err) {
+      console.error('Error descargando PDF:', err);
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleWhatsApp = async () => {
+    setGeneratingPdf(true);
+    try {
+      let url = pdfUrl;
+      if (!url) url = await generateAndUploadPdf();
+
+      const phone = sale.customer_phone?.replace(/\D/g, '');
+      const finalPhone = phone && phone.length === 10 ? `57${phone}` : phone;
+
+      let msg = `Hola ${sale.customer_name || 'Cliente'} 👋\n\nTe enviamos tu factura *${sale.invoice_number}* de *${companyName}*.\n\n💰 Total: *${formatMoney(sale.total_amount)}*`;
+      if (url) msg += `\n\n📄 Ver/Descargar tu factura PDF:\n${url}`;
+      msg += `\n\n¡Gracias por tu compra! 🙏`;
+
+      window.open(
+        finalPhone
+          ? `https://wa.me/${finalPhone}?text=${encodeURIComponent(msg)}`
+          : `https://wa.me/?text=${encodeURIComponent(msg)}`,
+        '_blank'
+      );
+    } catch (err) {
+      console.error('Error en handleWhatsApp:', err);
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleEmail = async () => {
+    setGeneratingPdf(true);
+    try {
+      let url = pdfUrl;
+      if (!url) url = await generateAndUploadPdf();
+
+      const target = sale.customer_email || prompt('Ingrese el correo del cliente:');
+      if (!target) return;
+
+      const subject = encodeURIComponent(`Factura ${sale.invoice_number} - ${companyName}`);
+      let bodyText = `Hola ${sale.customer_name || 'Cliente'},\n\nGracias por tu compra en ${companyName}.\n\nFactura: ${sale.invoice_number}\nTotal: ${formatMoney(sale.total_amount)}`;
+      if (url) bodyText += `\n\nDescarga tu factura PDF aquí:\n${url}`;
+      bodyText += `\n\n¡Gracias por preferirnos!\n${companyName}\nTel: ${company?.phone || ''}\n${company?.email || ''}`;
+
+      window.location.href = `mailto:${target}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
+    } catch (err) {
+      console.error('Error en handleEmail:', err);
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handlePrint = () => setTimeout(() => window.print(), 300);
 
   const getStatusBadge = () => {
     const s = sale.status;
-    if (s === 'ACCEPTED')           return <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold flex items-center gap-1"><CheckCircle size={12}/> DIAN: ACEPTADA</span>;
-    if (s === 'REJECTED')           return <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded font-bold flex items-center gap-1"><XCircle size={12}/> DIAN: RECHAZADA</span>;
-    if (s === 'PENDING_ELECTRONIC') return <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded font-bold flex items-center gap-1"><Clock size={12}/> PENDIENTE ENVÍO</span>;
+    if (s === 'ACCEPTED') return (
+      <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold flex items-center gap-1">
+        <CheckCircle size={12} /> DIAN: ACEPTADA
+      </span>
+    );
+    if (s === 'REJECTED') return (
+      <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded font-bold flex items-center gap-1">
+        <XCircle size={12} /> DIAN: RECHAZADA
+      </span>
+    );
+    if (s === 'PENDING_ELECTRONIC') return (
+      <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded font-bold flex items-center gap-1">
+        <Clock size={12} /> PENDIENTE ENVÍO
+      </span>
+    );
     return null;
   };
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4 backdrop-blur-sm print:p-0 print:bg-white print:fixed print:inset-0">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden print:shadow-none print:max-w-none print:max-h-none print:rounded-none">
+    <div className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[95vh] flex flex-col overflow-hidden relative">
 
         {/* Header */}
-        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 print:hidden">
+        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 print:hidden flex-shrink-0">
           <div className="flex flex-col gap-1">
             <h3 className="font-bold text-slate-800">Factura Generada</h3>
             {getStatusBadge()}
           </div>
-          <div className="flex gap-2">
-            <button onClick={handleWhatsApp} className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600" title="WhatsApp">
-              <MessageCircle size={18} />
+          <div className="flex gap-2 flex-wrap justify-end">
+            <button
+              onClick={handleWhatsApp}
+              disabled={generatingPdf}
+              className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50"
+              title="Enviar por WhatsApp con PDF"
+            >
+              {generatingPdf ? <Loader size={18} className="animate-spin" /> : <MessageCircle size={18} />}
             </button>
-            <button onClick={handleEmail} className="p-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700" title="Email">
-              <Mail size={18} />
+            <button
+              onClick={handleEmail}
+              disabled={generatingPdf}
+              className="p-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50"
+              title="Enviar por Email con PDF"
+            >
+              {generatingPdf ? <Loader size={18} className="animate-spin" /> : <Mail size={18} />}
             </button>
-            <button onClick={handlePrint} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700" title="Imprimir">
+            <button
+              onClick={handleDownloadPdf}
+              disabled={generatingPdf}
+              className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+              title="Descargar PDF"
+            >
+              {generatingPdf ? <Loader size={18} className="animate-spin" /> : <Download size={18} />}
+            </button>
+            <button
+              onClick={handlePrint}
+              className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              title="Imprimir"
+            >
               <Printer size={18} />
             </button>
             <button onClick={onClose} className="p-2 text-slate-500 hover:bg-slate-200 rounded-lg">
@@ -133,17 +284,39 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
           </div>
         </div>
 
-        {/* Receipt */}
-        <div className="flex-1 overflow-auto p-6 bg-white text-sm font-mono text-slate-900">
+        {/* Link PDF listo */}
+        {pdfUrl && (
+          <div className="px-4 py-2 bg-green-50 border-b border-green-200 flex items-center gap-2 print:hidden flex-shrink-0">
+            <CheckCircle size={14} className="text-green-600" />
+            <span className="text-xs text-green-700 font-medium">PDF listo —</span>
+            <a href={pdfUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline truncate">
+              Ver PDF
+            </a>
+          </div>
+        )}
 
+        {/* Overlay carga */}
+        {generatingPdf && (
+          <div className="absolute inset-0 z-10 bg-white/80 flex flex-col items-center justify-center gap-3 print:hidden rounded-xl">
+            <Loader size={36} className="animate-spin text-blue-600" />
+            <p className="text-slate-600 font-medium text-sm">Generando PDF completo...</p>
+          </div>
+        )}
+
+        {/* Receipt */}
+        <div
+          ref={receiptRef}
+          id="invoice-print-area"
+          className="flex-1 overflow-auto p-6 bg-white text-sm font-mono text-slate-900"
+        >
           {/* Empresa */}
           <div className="text-center mb-6">
-            {/* LOGO DE EMPRESA */}
             {company?.logo_url && (
               <div className="flex justify-center mb-4">
                 <img
                   src={company.logo_url}
                   alt="Logo"
+                  crossOrigin="anonymous"
                   className="w-auto object-contain"
                   style={{ height: '90px', maxWidth: '220px' }}
                 />
@@ -193,13 +366,17 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
             </thead>
             <tbody>
               {items.length === 0 ? (
-                <tr><td colSpan={3} className="text-center text-slate-400 py-4">Sin items</td></tr>
+                <tr>
+                  <td colSpan={3} className="text-center text-slate-400 py-4">Sin items</td>
+                </tr>
               ) : items.map((item, idx) => (
                 <tr key={idx} className="border-b border-slate-100">
                   <td className="py-2 align-top">{item.quantity}</td>
                   <td className="py-2 align-top">
                     <div>{item.product_name}</div>
-                    {item.serial_number && <div className="text-[10px] text-slate-500">SN: {item.serial_number}</div>}
+                    {item.serial_number && (
+                      <div className="text-[10px] text-slate-500">SN: {item.serial_number}</div>
+                    )}
                   </td>
                   <td className="py-2 text-right align-top">{formatMoney(item.price * item.quantity)}</td>
                 </tr>
@@ -213,10 +390,17 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
               <span>Subtotal:</span>
               <span>{formatMoney(subtotal)}</span>
             </div>
-            <div className="flex justify-between text-slate-600">
-              <span>IVA (19%):</span>
-              <span>{formatMoney(taxAmount)}</span>
-            </div>
+            {showIva ? (
+              <div className="flex justify-between text-slate-600">
+                <span>IVA:</span>
+                <span>{formatMoney(taxAmount)}</span>
+              </div>
+            ) : (
+              <div className="flex justify-between text-slate-400">
+                <span>IVA:</span>
+                <span>No aplica</span>
+              </div>
+            )}
             <div className="flex justify-between font-bold text-base mt-2 pt-2 border-t border-slate-300">
               <span>TOTAL A PAGAR:</span>
               <span>{formatMoney(sale.total_amount)}</span>
@@ -242,12 +426,11 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
             </div>
           )}
 
-          {/* TÉRMINOS Y CONDICIONES DE GARANTÍA */}
+          {/* TÉRMINOS Y CONDICIONES */}
           <div className="mt-6 pt-4 border-t border-slate-300 text-[9px] text-slate-500 leading-tight space-y-3">
             <p className="font-bold uppercase text-slate-700 text-[10px] text-center tracking-wide">
               Términos y Condiciones de Garantía
             </p>
-
             <div>
               <p className="font-bold text-slate-600 mb-0.5 uppercase text-[9px]">Condiciones de Recepción de Equipos</p>
               <p>• No se reciben equipos destapados o con sellos de garantía violados</p>
@@ -255,7 +438,6 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
               <p>• No se reciben equipos con humedad, corrosión o daño por líquidos</p>
               <p>• No se reciben equipos con golpes o daños físicos no reportados al momento de la compra</p>
             </div>
-
             <div>
               <p className="font-bold text-slate-600 mb-0.5 uppercase text-[9px]">Exclusiones de Garantía</p>
               <p>• Pantallas (Display) y vidrios no tienen cobertura de garantía</p>
@@ -267,7 +449,6 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
               <p>• No se responde por bloqueo de iCloud o Activation Lock</p>
               <p>• No se responde por equipos con reporte de robo ante operadores o autoridades</p>
             </div>
-
             <div>
               <p className="font-bold text-slate-600 mb-0.5 uppercase text-[9px]">Proceso de Garantía</p>
               <p>• El proceso de garantía tiene una duración de 8 días hábiles</p>
@@ -275,7 +456,6 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
               <p>• El cliente debe presentar su factura original para hacer válida la garantía</p>
               <p>• Los equipos deben entregarse con sus accesorios y empaque original</p>
             </div>
-
             <div className="pt-1 border-t border-slate-200 text-center">
               <p className="font-bold text-slate-600">Contacto: 316-154 55 54 | WhatsApp disponible</p>
             </div>
@@ -287,11 +467,16 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
 
       <style>{`
         @media print {
-          @page { margin: 0; size: 80mm 297mm; }
-          body * { visibility: hidden; }
-          .print\\:fixed { position: fixed; top: 0; left: 0; width: 100%; visibility: visible; display: block !important; }
-          .print\\:fixed * { visibility: visible; }
-          .print\\:hidden { display: none !important; }
+          @page { margin: 0; size: 80mm auto; }
+          body * { visibility: hidden !important; }
+          #invoice-print-area, #invoice-print-area * { visibility: visible !important; }
+          #invoice-print-area {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 80mm !important;
+            background: white !important;
+          }
         }
       `}</style>
     </div>
