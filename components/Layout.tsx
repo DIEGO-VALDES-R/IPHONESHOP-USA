@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, Package, Wrench,
   Settings, LogOut, Menu, Building2, User,
-  Landmark, FileText, Globe, Receipt
+  Landmark, FileText, Globe, Receipt, ShieldCheck
 } from 'lucide-react';
 import { useCurrency, CurrencyCode } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
@@ -17,7 +17,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const { currency, setCurrency } = useCurrency();
-  const { company, isLoading } = useDatabase();
+  const { company, isLoading, userRole, availableCompanies, switchCompany, companyId } = useDatabase();
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -62,6 +62,33 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          {userRole === 'MASTER' && (
+            <div className="mb-6 px-2">
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-2">
+                Panel Maestro
+              </label>
+              <div className="flex items-center gap-2 px-3 py-2 bg-blue-900/30 border border-blue-800/50 rounded-lg text-blue-200 mb-2">
+                <ShieldCheck size={16} />
+                <span className="text-xs font-bold">MODO MASTER</span>
+              </div>
+              <select
+                value={companyId || ''}
+                onChange={(e) => switchCompany(e.target.value)}
+                className="w-full bg-slate-800 text-xs border border-slate-700 rounded-lg p-2 focus:ring-1 focus:ring-blue-500 outline-none cursor-pointer"
+              >
+                <option value="" disabled>Seleccionar Empresa</option>
+                {availableCompanies.map(c => (
+                  <option key={c.id} value={c.id} className="text-slate-900">
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-4">
+            Menú Principal
+          </label>
           {navItems.map((item) => (
             <Link
               key={item.path}
@@ -98,7 +125,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </div>
             <div className="overflow-hidden">
               <p className="text-sm font-medium truncate">{companyName}</p>
-              <p className="text-xs text-slate-400 truncate">Administrador</p>
+              <p className="text-xs text-slate-400 truncate">
+                {userRole === 'MASTER' ? 'Usuario Maestro' : 'Administrador'}
+              </p>
             </div>
           </div>
 
@@ -118,6 +147,25 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="flex justify-end mb-8">
             <button onClick={() => setIsMobileMenuOpen(false)} className="text-white text-lg font-bold">x</button>
           </div>
+          
+          {userRole === 'MASTER' && (
+            <div className="mb-6">
+              <p className="text-blue-400 text-xs font-bold mb-2">MODO MASTER</p>
+              <select
+                value={companyId || ''}
+                onChange={(e) => {
+                  switchCompany(e.target.value);
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full bg-slate-800 text-white p-3 rounded-lg"
+              >
+                {availableCompanies.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {navItems.map((item) => (
             <Link
               key={item.path}

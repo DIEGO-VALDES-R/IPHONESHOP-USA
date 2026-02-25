@@ -11,6 +11,7 @@ import CashControl from './pages/CashControl';
 import AccountsReceivable from './pages/AccountsReceivable';
 import InvoiceHistory from './pages/InvoiceHistory';
 import Settings from './pages/Settings';
+import MasterAdmin from './pages/MasterAdmin';
 import { Toaster } from 'react-hot-toast';
 
 // ── LOGIN REAL CON SUPABASE ──────────────────────────
@@ -135,6 +136,7 @@ const App: React.FC = () => {
                     <Route path="/receivables" element={<AccountsReceivable />} />
                     <Route path="/invoices" element={<InvoiceHistory />} />
                     <Route path="/settings" element={<Settings />} />
+                    <Route path="/master-admin" element={<MasterAdmin />} />
                   </Routes>
                 </Layout>
               } />
@@ -147,4 +149,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
