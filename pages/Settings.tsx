@@ -68,26 +68,26 @@ const Settings: React.FC = () => {
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    const file = e.target.files[0];
-    setIsUploading(true);
-    try {
-      const fileName = `logo-${safeCompany.id}-${Math.random()}`;
-      const { error } = await supabase.storage.from('company-logos').upload(fileName, file);
-      if (error) {
-        const fakeUrl = URL.createObjectURL(file);
-        setFormData({ ...formData, logo_url: fakeUrl });
-        updateCompanyConfig({ logo_url: fakeUrl });
-        toast.success('Logo actualizado (local)');
-      } else {
-        const { data } = supabase.storage.from('company-logos').getPublicUrl(fileName);
-        setFormData({ ...formData, logo_url: data.publicUrl });
-        updateCompanyConfig({ logo_url: data.publicUrl });
-        toast.success('Logo subido correctamente');
-      }
-    } catch { toast.error('Error al subir la imagen'); }
-    finally { setIsUploading(false); }
-  };
+  if (!e.target.files || e.target.files.length === 0) return;
+  const file = e.target.files[0];
+  setIsUploading(true);
+  try {
+    const ext = file.name.split('.').pop();
+    const fileName = `logo-${safeCompany.id}-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage
+      .from('company-logos')
+      .upload(fileName, file, { upsert: true });
+    if (error) { toast.error('Error al subir: ' + error.message); return; }
+    const { data } = supabase.storage.from('company-logos').getPublicUrl(fileName);
+    setFormData({ ...formData, logo_url: data.publicUrl });
+    updateCompanyConfig({ logo_url: data.publicUrl });
+    toast.success('Logo subido correctamente');
+  } catch (err: any) {
+    toast.error('Error: ' + err.message);
+  } finally {
+    setIsUploading(false);
+  }
+};
 
   const currentPlan = PLANS.find(p => p.id === safeCompany.subscription_plan) || PLANS[0];
 
