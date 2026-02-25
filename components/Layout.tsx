@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, Package, Wrench,
   Settings, LogOut, Menu, Building2, User,
-  Landmark, FileText, Globe, Receipt, ShieldCheck
+  Landmark, FileText, Globe, Receipt
 } from 'lucide-react';
 import { useCurrency, CurrencyCode } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
@@ -15,11 +15,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const { currency, setCurrency } = useCurrency();
-  const { company, isLoading, userRole, companyId } = useDatabase();
+  const { company, isLoading } = useDatabase();
 
   const handleLogout = async () => {
-    // Limpiar empresa seleccionada al cerrar sesion
-    localStorage.removeItem('master_selected_company');
     await supabase.auth.signOut();
   };
 
@@ -29,9 +27,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { label: 'Control de Caja',    path: '/cash-control', icon: Landmark },
     { label: 'Inventario',         path: '/inventory',    icon: Package },
     { label: 'Historial Facturas', path: '/invoices',     icon: Receipt },
-    { label: 'Servicio Tecnico',   path: '/repairs',      icon: Wrench },
+    { label: 'Servicio Técnico',   path: '/repairs',      icon: Wrench },
     { label: 'Cartera / CxC',      path: '/receivables',  icon: FileText },
-    { label: 'Configuracion',      path: '/settings',     icon: Settings },
+    { label: 'Configuración',      path: '/settings',     icon: Settings },
   ];
 
   const isActive = (path: string) => location.pathname === path;
@@ -56,21 +54,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <p className="text-xs text-slate-400">ERP System</p>
             </div>
           </div>
-
-          {/* Badge MASTER — solo visual, sin selector */}
-          {userRole === 'MASTER' && (
-            <div className="mt-3 flex items-center gap-2 px-3 py-1.5 bg-blue-900/40 border border-blue-700/50 rounded-lg text-blue-300">
-              <ShieldCheck size={13} />
-              <span className="text-[10px] font-bold tracking-widest uppercase">Modo Maestro</span>
-            </div>
-          )}
         </div>
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-2">
-            Menu Principal
+            Menú Principal
           </label>
-
           {navItems.map((item) => (
             <Link key={item.path} to={item.path}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
@@ -82,19 +71,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <span className="font-medium">{item.label}</span>
             </Link>
           ))}
-
-          {/* Panel Maestro — solo visible para MASTER */}
-          {userRole === 'MASTER' && (
-            <Link to="/master-admin"
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 mt-2 border ${
-                isActive('/master-admin')
-                  ? 'bg-blue-600 text-white border-blue-500 shadow-lg'
-                  : 'text-blue-400 border-blue-800/40 hover:bg-blue-900/30 hover:text-blue-200'
-              }`}>
-              <ShieldCheck size={20} />
-              <span className="font-medium">Panel Maestro</span>
-            </Link>
-          )}
         </nav>
 
         <div className="p-4 border-t border-slate-700">
@@ -103,7 +79,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <select value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
               className="bg-transparent text-sm font-medium text-white focus:outline-none w-full cursor-pointer">
               <option value="COP" className="text-slate-900">COP (Peso)</option>
-              <option value="USD" className="text-slate-900">USD (Dolar)</option>
+              <option value="USD" className="text-slate-900">USD (Dólar)</option>
               <option value="EUR" className="text-slate-900">EUR (Euro)</option>
             </select>
           </div>
@@ -114,16 +90,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </div>
             <div className="overflow-hidden">
               <p className="text-sm font-medium truncate">{companyName}</p>
-              <p className="text-xs text-slate-400 truncate">
-                {userRole === 'MASTER' ? 'Usuario Maestro' : 'Administrador'}
-              </p>
+              <p className="text-xs text-slate-400">Administrador</p>
             </div>
           </div>
 
           <button onClick={handleLogout}
             className="flex w-full items-center gap-3 px-4 py-2 text-red-400 hover:bg-red-900/20 rounded-lg transition-colors">
             <LogOut size={20} />
-            <span className="font-medium">Cerrar Sesion</span>
+            <span className="font-medium">Cerrar Sesión</span>
           </button>
         </div>
       </aside>
@@ -134,14 +108,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="flex justify-end mb-8">
             <button onClick={() => setIsMobileMenuOpen(false)} className="text-white text-2xl font-bold">✕</button>
           </div>
-
-          {userRole === 'MASTER' && (
-            <div className="mb-4 px-2 py-2 bg-blue-900/30 border border-blue-700/40 rounded-lg text-blue-300 flex items-center gap-2">
-              <ShieldCheck size={14} />
-              <span className="text-xs font-bold uppercase tracking-wider">Modo Maestro</span>
-            </div>
-          )}
-
           {navItems.map((item) => (
             <Link key={item.path} to={item.path} onClick={() => setIsMobileMenuOpen(false)}
               className="flex items-center gap-4 text-white text-xl py-4 border-b border-slate-700">
@@ -149,26 +115,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <span>{item.label}</span>
             </Link>
           ))}
-
-          {userRole === 'MASTER' && (
-            <Link to="/master-admin" onClick={() => setIsMobileMenuOpen(false)}
-              className="flex items-center gap-4 text-blue-400 text-xl py-4 border-b border-slate-700">
-              <ShieldCheck size={24} />
-              <span>Panel Maestro</span>
-            </Link>
-          )}
-
           <div className="mt-4">
             <select value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
               className="w-full bg-slate-800 text-white p-3 rounded-lg">
               <option value="COP">COP (Colombia)</option>
-              <option value="USD">USD (Dolar)</option>
+              <option value="USD">USD (Dólar)</option>
+              <option value="EUR">EUR (Euro)</option>
             </select>
           </div>
-
           <button onClick={handleLogout} className="mt-4 flex items-center gap-3 text-red-400 py-3">
             <LogOut size={20} />
-            <span>Cerrar Sesion</span>
+            <span>Cerrar Sesión</span>
           </button>
         </div>
       )}
