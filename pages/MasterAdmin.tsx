@@ -30,7 +30,7 @@ const MasterAdmin: React.FC = () => {
       .from('companies')
       .select('*, profiles(count)')
       .order('created_at', { ascending: false });
-
+    
     if (error) {
       toast.error('Error al cargar empresas');
     } else {
@@ -43,11 +43,7 @@ const MasterAdmin: React.FC = () => {
     e.preventDefault();
     const { data, error } = await supabase
       .from('companies')
-      .insert([{
-        ...newCompany,
-        subscription_plan: 'BASIC',
-        subscription_status: 'ACTIVE',
-      }])
+      .insert([newCompany])
       .select();
 
     if (error) {
@@ -55,8 +51,9 @@ const MasterAdmin: React.FC = () => {
     } else {
       toast.success('Empresa creada correctamente');
       setShowNewCompanyModal(false);
-      setNewCompany({ name: '', nit: '', email: '', phone: '', address: '' });
       fetchCompanies();
+      // Reset form
+      setNewCompany({ name: '', nit: '', email: '', phone: '', address: '' });
     }
   };
 
@@ -65,24 +62,24 @@ const MasterAdmin: React.FC = () => {
       <div className="flex flex-col items-center justify-center h-full text-slate-500">
         <Shield size={48} className="mb-4 text-red-400" />
         <h1 className="text-2xl font-bold">Acceso Denegado</h1>
-        <p>Esta pagina es solo para usuarios maestros.</p>
+        <p>Esta página es solo para usuarios maestros.</p>
       </div>
     );
   }
 
-  const filteredCompanies = companies.filter(c =>
-    (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.nit  || '').toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredCompanies = companies.filter(c => 
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    c.nit.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Panel de Administracion Maestro</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Panel de Administración Maestro</h1>
           <p className="text-slate-500">Gestiona todos tus clientes y empresas desde un solo lugar.</p>
         </div>
-        <button
+        <button 
           onClick={() => setShowNewCompanyModal(true)}
           className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
         >
@@ -93,8 +90,10 @@ const MasterAdmin: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><Building2 size={24} /></div>
+          <div className="flex items-center gap-4 mb-2">
+            <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+              <Building2 size={24} />
+            </div>
             <div>
               <p className="text-sm text-slate-500 font-medium">Total Empresas</p>
               <p className="text-2xl font-bold text-slate-800">{companies.length}</p>
@@ -102,8 +101,10 @@ const MasterAdmin: React.FC = () => {
           </div>
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-green-50 text-green-600 rounded-xl"><CheckCircle2 size={24} /></div>
+          <div className="flex items-center gap-4 mb-2">
+            <div className="p-3 bg-green-50 text-green-600 rounded-xl">
+              <CheckCircle2 size={24} />
+            </div>
             <div>
               <p className="text-sm text-slate-500 font-medium">Empresas Activas</p>
               <p className="text-2xl font-bold text-slate-800">
@@ -113,8 +114,10 @@ const MasterAdmin: React.FC = () => {
           </div>
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-purple-50 text-purple-600 rounded-xl"><Users size={24} /></div>
+          <div className="flex items-center gap-4 mb-2">
+            <div className="p-3 bg-purple-50 text-purple-600 rounded-xl">
+              <Users size={24} />
+            </div>
             <div>
               <p className="text-sm text-slate-500 font-medium">Total Usuarios</p>
               <p className="text-2xl font-bold text-slate-800">
@@ -166,10 +169,8 @@ const MasterAdmin: React.FC = () => {
                   <tr key={c.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-500 overflow-hidden">
-                          {c.logo_url
-                            ? <img src={c.logo_url} className="w-full h-full object-cover rounded-lg" alt="" />
-                            : <Building2 size={20} />}
+                        <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-500">
+                          {c.logo_url ? <img src={c.logo_url} className="w-full h-full object-cover rounded-lg" alt="" /> : <Building2 size={20} />}
                         </div>
                         <div>
                           <p className="font-bold text-slate-800">{c.name}</p>
@@ -177,36 +178,29 @@ const MasterAdmin: React.FC = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600 font-medium">{c.nit || '--'}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600 font-medium">{c.nit}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
                         c.subscription_plan === 'ENTERPRISE' ? 'bg-purple-100 text-purple-700' :
-                        c.subscription_plan === 'PRO'        ? 'bg-blue-100 text-blue-700'   :
-                                                               'bg-slate-100 text-slate-700'
+                        c.subscription_plan === 'PRO' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'
                       }`}>
-                        {c.subscription_plan || 'BASIC'}
+                        {c.subscription_plan}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      {c.subscription_status === 'ACTIVE' ? (
-                        <div className="flex items-center gap-1.5">
-                          <CheckCircle2 size={14} className="text-green-500" />
-                          <span className="text-sm text-green-600 font-medium">Activa</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          <XCircle size={14} className="text-red-500" />
-                          <span className="text-sm text-red-600 font-medium">Inactiva</span>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {c.subscription_status === 'ACTIVE' ? (
+                          <><CheckCircle2 size={14} className="text-green-500" /><span className="text-sm text-green-600 font-medium">Activa</span></>
+                        ) : (
+                          <><XCircle size={14} className="text-red-500" /><span className="text-sm text-red-600 font-medium">Inactiva</span></>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500">
                       {new Date(c.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button className="text-blue-600 hover:text-blue-800 font-bold text-sm">
-                        Gestionar
-                      </button>
+                      <button className="text-blue-600 hover:text-blue-800 font-bold text-sm">Gestionar</button>
                     </td>
                   </tr>
                 ))
@@ -216,6 +210,7 @@ const MasterAdmin: React.FC = () => {
         </div>
       </div>
 
+      {/* Modal Nueva Empresa */}
       {showNewCompanyModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
@@ -228,25 +223,27 @@ const MasterAdmin: React.FC = () => {
             <form onSubmit={handleCreateCompany} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Nombre de la Empresa *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Nombre de la Empresa</label>
                   <input
-                    type="text" required
+                    type="text"
+                    required
                     value={newCompany.name}
                     onChange={e => setNewCompany({...newCompany, name: e.target.value})}
                     className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">NIT / Identificacion *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">NIT / Identificación</label>
                   <input
-                    type="text" required
+                    type="text"
+                    required
                     value={newCompany.nit}
                     onChange={e => setNewCompany({...newCompany, nit: e.target.value})}
                     className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Telefono</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Teléfono</label>
                   <input
                     type="text"
                     value={newCompany.phone}
@@ -264,7 +261,7 @@ const MasterAdmin: React.FC = () => {
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Direccion</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Dirección</label>
                   <input
                     type="text"
                     value={newCompany.address}

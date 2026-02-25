@@ -8,34 +8,57 @@ interface CompanyContext {
   isLoading: boolean;
 }
 
-let cached: CompanyContext | null = null;
-
+// NO usar cache global — el MASTER cambia de empresa dinamicamente
 export function useCompany(): CompanyContext {
   const [ctx, setCtx] = useState<CompanyContext>(
-    cached || { companyId: null, branchId: null, userId: null, isLoading: true }
+    { companyId: null, branchId: null, userId: null, isLoading: true }
   );
 
   useEffect(() => {
-    if (cached) { setCtx(cached); return; }
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        const result = { companyId: null, branchId: null, userId: null, isLoading: false };
-        cached = result; setCtx(result); return;
+        setCtx({ companyId: null, branchId: null, userId: null, isLoading: false });
+        return;
       }
+
       const { data: profile } = await supabase
         .from('profiles')
-        .select('company_id, branch_id')
+        .select('company_id, branch_id, role')
         .eq('id', user.id)
         .single();
-      const result = {
+
+      // Si es MASTER, usar la empresa guardada en localStorage
+      if (profile?.role === 'MASTER') {
+        const masterCompany = localStorage.getItem('master_selected_company');
+
+        if (masterCompany) {
+          // Buscar branch de esa empresa
+          const { data: branches } = await supabase
+            .from('branches')
+            .select('id')
+            .eq('company_id', masterCompany)
+            .limit(1);
+
+          setCtx({
+            companyId: masterCompany,
+            branchId: branches && branches.length > 0 ? branches[0].id : null,
+            userId: user.id,
+            isLoading: false,
+          });
+        } else {
+          setCtx({ companyId: null, branchId: null, userId: user.id, isLoading: false });
+        }
+        return;
+      }
+
+      // Usuario normal: usar su company_id del perfil
+      setCtx({
         companyId: profile?.company_id || null,
-        branchId: profile?.branch_id || null,
-        userId: user.id,
+        branchId:  profile?.branch_id  || null,
+        userId:    user.id,
         isLoading: false,
-      };
-      cached = result;
-      setCtx(result);
+      });
     })();
   }, []);
 

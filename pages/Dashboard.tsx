@@ -36,8 +36,10 @@ const Dashboard: React.FC = () => {
   const [salesChart, setSalesChart] = useState<any[]>([]);
 
   useEffect(() => {
+    // Build chart data from real sales
     const dayNames = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
     const grouped: Record<string, number> = {};
+    // Initialize all days to 0
     dayNames.forEach(d => grouped[d] = 0);
     sales.forEach((s: any) => {
       const d = dayNames[new Date(s.created_at).getDay()];
@@ -47,22 +49,6 @@ const Dashboard: React.FC = () => {
   }, [sales]);
 
   const totalSales = sales.reduce((sum: number, s: any) => sum + (s.total_amount || 0), 0);
-
-  // Utilidad real: suma (precio - costo) * cantidad por cada item vendido
-  const totalProfit = sales.reduce((sum: number, sale: any) => {
-    const items = sale.invoice_items || [];
-    const saleProfit = items.reduce((itemSum: number, item: any) => {
-      const product = products.find(p => p.id === item.product_id);
-      const cost = product?.cost ?? 0;
-      const price = item.price ?? 0;
-      const qty = item.quantity ?? 1;
-      return itemSum + ((price - cost) * qty);
-    }, 0);
-    return sum + saleProfit;
-  }, 0);
-
-  const profitMargin = totalSales > 0 ? Math.round((totalProfit / totalSales) * 100) : 0;
-
   const inventoryValue = products.reduce((sum, p) => sum + (p.cost * (p.stock_quantity || 0)), 0);
   const activeRepairs = repairs.filter((r: any) =>
     !['DELIVERED', 'CANCELLED'].includes(r.status)
@@ -106,9 +92,9 @@ const Dashboard: React.FC = () => {
           icon={DollarSign} color="blue"
         />
         <StatCard
-          title="Utilidad Real"
-          value={formatMoney(totalProfit)}
-          subtext={`Margen ${profitMargin}% sobre ventas`}
+          title="Utilidad Estimada"
+          value={formatMoney(totalSales * 0.25)}
+          subtext="Margen ~25%"
           icon={TrendingUp} color="green"
         />
         <StatCard
@@ -127,7 +113,7 @@ const Dashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-          <h3 className="font-bold text-lg text-slate-800 mb-6">Ventas por Dia (esta semana)</h3>
+          <h3 className="font-bold text-lg text-slate-800 mb-6">Ventas por DÃ­a (esta semana)</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={salesChart}>
@@ -150,7 +136,7 @@ const Dashboard: React.FC = () => {
           <h3 className="font-bold text-lg text-slate-800 mb-6">Top Productos (por margen)</h3>
           <div className="space-y-4">
             {topProducts.length === 0 ? (
-              <p className="text-slate-400 text-sm text-center py-8">Sin productos aun</p>
+              <p className="text-slate-400 text-sm text-center py-8">Sin productos aÃºn</p>
             ) : topProducts.map((p, i) => (
               <div key={p.id} className="flex items-center gap-4 p-2 hover:bg-slate-50 rounded-lg">
                 <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
@@ -158,7 +144,7 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="font-medium text-slate-800 truncate">{p.name}</h4>
-                  <p className="text-xs text-slate-400">Stock: {p.stock_quantity ?? 0} | Margen: {formatMoney(p.price - p.cost)}</p>
+                  <p className="text-xs text-slate-400">Stock: {p.stock_quantity ?? 0}</p>
                 </div>
                 <span className="font-bold text-slate-700 text-sm">{formatMoney(p.price)}</span>
               </div>
