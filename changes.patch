@@ -1,0 +1,201 @@
+From abb4a65a04a719e1ab5e9d893bb2ce6ff4192034 Mon Sep 17 00:00:00 2001
+From: Manus AI <manus@ai.com>
+Date: Wed, 25 Feb 2026 08:32:47 -0500
+Subject: [PATCH] Add Invoices view to admin panel with search by customer
+ document
+
+---
+ App.tsx                      |   2 +
+ components/Layout.tsx        |   1 +
+ contexts/DatabaseContext.tsx |   2 +-
+ pages/Invoices.tsx           | 133 +++++++++++++++++++++++++++++++++++
+ 4 files changed, 137 insertions(+), 1 deletion(-)
+ create mode 100644 pages/Invoices.tsx
+
+diff --git a/App.tsx b/App.tsx
+index 5d9188a..984b846 100644
+--- a/App.tsx
++++ b/App.tsx
+@@ -10,6 +10,7 @@ import Repairs from './pages/Repairs';
+ import CashControl from './pages/CashControl';
+ import AccountsReceivable from './pages/AccountsReceivable';
+ import Settings from './pages/Settings';
++import Invoices from './pages/Invoices';
+ import { Toaster } from 'react-hot-toast';
+ 
+ // ── LOGIN REAL CON SUPABASE ──────────────────────────
+@@ -133,6 +134,7 @@ const App: React.FC = () => {
+                     <Route path="/cash-control" element={<CashControl />} />
+                     <Route path="/receivables" element={<AccountsReceivable />} />
+                     <Route path="/settings" element={<Settings />} />
++                    <Route path="/invoices" element={<Invoices />} />
+                   </Routes>
+                 </Layout>
+               } />
+diff --git a/components/Layout.tsx b/components/Layout.tsx
+index 5599ad5..9a2e3b9 100644
+--- a/components/Layout.tsx
++++ b/components/Layout.tsx
+@@ -30,6 +30,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
+     { label: 'Inventario',      path: '/inventory',    icon: Package },
+     { label: 'Servicio Técnico',path: '/repairs',      icon: Wrench },
+     { label: 'Cartera / CxC',   path: '/receivables',  icon: FileText },
++    { label: 'Facturas',        path: '/invoices',     icon: FileText },
+     { label: 'Configuración',   path: '/settings',     icon: Settings },
+   ];
+ 
+diff --git a/contexts/DatabaseContext.tsx b/contexts/DatabaseContext.tsx
+index 2261e0a..5ad79e1 100644
+--- a/contexts/DatabaseContext.tsx
++++ b/contexts/DatabaseContext.tsx
+@@ -109,7 +109,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
+     const { data } = await supabase
+       .from('invoices')
+       .select('*, invoice_items(*)')
+-      .eq('company_id', cid).order('created_at', { ascending: false }).limit(50);
++      .eq('company_id', cid).order('created_at', { ascending: false }).limit(200);
+     setSales((data || []) as any);
+   };
+ 
+diff --git a/pages/Invoices.tsx b/pages/Invoices.tsx
+new file mode 100644
+index 0000000..d11cb2d
+--- /dev/null
++++ b/pages/Invoices.tsx
+@@ -0,0 +1,133 @@
++import React, { useState, useMemo } from 'react';
++import { Search, FileText, Eye, Calendar, User, Hash, DollarSign } from 'lucide-react';
++import { useDatabase } from '../contexts/DatabaseContext';
++import { useCurrency } from '../contexts/CurrencyContext';
++import InvoiceModal from '../components/InvoiceModal';
++
++const Invoices: React.FC = () => {
++  const { sales, company, isLoading } = useDatabase();
++  const { formatMoney } = useCurrency();
++  const [searchTerm, setSearchTerm] = useState('');
++  const [selectedSale, setSelectedSale] = useState<any>(null);
++  const [isModalOpen, setIsModalOpen] = useState(false);
++
++  const filteredSales = useMemo(() => {
++    return sales.filter((sale: any) => {
++      const searchLower = searchTerm.toLowerCase();
++      return (
++        sale.invoice_number?.toLowerCase().includes(searchLower) ||
++        sale.customer_name?.toLowerCase().includes(searchLower) ||
++        sale.customer_document?.toLowerCase().includes(searchLower)
++      );
++    });
++  }, [sales, searchTerm]);
++
++  const handleViewInvoice = (sale: any) => {
++    setSelectedSale(sale);
++    setIsModalOpen(true);
++  };
++
++  if (isLoading) {
++    return (
++      <div className="flex items-center justify-center h-64">
++        <div className="text-slate-400 text-lg animate-pulse">Cargando facturas...</div>
++      </div>
++    );
++  }
++
++  return (
++    <div className="space-y-6">
++      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
++        <div>
++          <h2 className="text-2xl font-bold text-slate-800">Gestión de Facturas</h2>
++          <p className="text-slate-500">Consulta y revisa todas las facturas emitidas</p>
++        </div>
++        
++        <div className="relative w-full md:w-96">
++          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
++          <input
++            type="text"
++            placeholder="Buscar por cédula, nombre o factura..."
++            value={searchTerm}
++            onChange={(e) => setSearchTerm(e.target.value)}
++            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none shadow-sm transition-all"
++          />
++        </div>
++      </div>
++
++      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
++        <div className="overflow-x-auto">
++          <table className="w-full text-left border-collapse">
++            <thead>
++              <tr className="bg-slate-50 border-b border-slate-100">
++                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
++                  <div className="flex items-center gap-2"><Hash size={14} /> Factura</div>
++                </th>
++                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
++                  <div className="flex items-center gap-2"><Calendar size={14} /> Fecha</div>
++                </th>
++                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
++                  <div className="flex items-center gap-2"><User size={14} /> Cliente</div>
++                </th>
++                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
++                  <div className="flex items-center gap-2"><DollarSign size={14} /> Total</div>
++                </th>
++                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Acciones</th>
++              </tr>
++            </thead>
++            <tbody className="divide-y divide-slate-50">
++              {filteredSales.length === 0 ? (
++                <tr>
++                  <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
++                    <div className="flex flex-col items-center gap-2">
++                      <FileText size={48} className="text-slate-200" />
++                      <p>No se encontraron facturas</p>
++                    </div>
++                  </td>
++                </tr>
++              ) : (
++                filteredSales.map((sale: any) => (
++                  <tr key={sale.id} className="hover:bg-slate-50/50 transition-colors group">
++                    <td className="px-6 py-4">
++                      <span className="font-bold text-slate-700">{sale.invoice_number}</span>
++                    </td>
++                    <td className="px-6 py-4 text-slate-600 text-sm">
++                      {new Date(sale.created_at).toLocaleDateString()} {new Date(sale.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
++                    </td>
++                    <td className="px-6 py-4">
++                      <div className="flex flex-col">
++                        <span className="font-medium text-slate-800">{sale.customer_name || 'Consumidor Final'}</span>
++                        <span className="text-xs text-slate-400">{sale.customer_document || 'S/N'}</span>
++                      </div>
++                    </td>
++                    <td className="px-6 py-4">
++                      <span className="font-bold text-blue-600">{formatMoney(sale.total_amount)}</span>
++                    </td>
++                    <td className="px-6 py-4 text-center">
++                      <button
++                        onClick={() => handleViewInvoice(sale)}
++                        className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all font-medium text-sm"
++                      >
++                        <Eye size={16} />
++                        Ver Detalle
++                      </button>
++                    </td>
++                  </tr>
++                ))
++              )}
++            </tbody>
++          </table>
++        </div>
++      </div>
++
++      <InvoiceModal
++        isOpen={isModalOpen}
++        onClose={() => setIsModalOpen(false)}
++        sale={selectedSale}
++        company={company}
++      />
++    </div>
++  );
++};
++
++export default Invoices;
+-- 
+2.34.1
+

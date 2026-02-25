@@ -223,7 +223,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         tax_amount: taxAmount,
         total_amount: saleData.total,
         status: 'PENDING_ELECTRONIC',
-        payment_method: { method: 'CASH', amount: saleData.total }
+        payment_method: {
+        method: 'CASH',
+        amount: saleData.total,
+        customer_name:     saleData.customer     || null,
+        customer_document: saleData.customerDoc  || null,
+        customer_email:    saleData.customerEmail || null,
+        customer_phone:    saleData.customerPhone || null,
+      }
       }).select().single();
 
     if (invErr) throw invErr;

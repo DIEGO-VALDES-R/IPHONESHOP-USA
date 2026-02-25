@@ -9,6 +9,7 @@ import Inventory from './pages/Inventory';
 import Repairs from './pages/Repairs';
 import CashControl from './pages/CashControl';
 import AccountsReceivable from './pages/AccountsReceivable';
+import InvoiceHistory from './pages/InvoiceHistory';
 import Settings from './pages/Settings';
 import { Toaster } from 'react-hot-toast';
 
@@ -132,6 +133,7 @@ const App: React.FC = () => {
                     <Route path="/repairs" element={<Repairs />} />
                     <Route path="/cash-control" element={<CashControl />} />
                     <Route path="/receivables" element={<AccountsReceivable />} />
+                    <Route path="/invoices" element={<InvoiceHistory />} />
                     <Route path="/settings" element={<Settings />} />
                   </Routes>
                 </Layout>
@@ -145,3 +147,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+

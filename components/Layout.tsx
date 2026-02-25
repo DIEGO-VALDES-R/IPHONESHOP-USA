@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, Package, Wrench,
   Settings, LogOut, Menu, Building2, User,
-  Landmark, FileText, Globe
+  Landmark, FileText, Globe, Receipt
 } from 'lucide-react';
 import { useCurrency, CurrencyCode } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
@@ -24,18 +24,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   const navItems = [
-    { label: 'Dashboard',       path: '/',             icon: LayoutDashboard },
-    { label: 'Punto de Venta',  path: '/pos',          icon: ShoppingCart },
-    { label: 'Control de Caja', path: '/cash-control', icon: Landmark },
-    { label: 'Inventario',      path: '/inventory',    icon: Package },
-    { label: 'Servicio Técnico',path: '/repairs',      icon: Wrench },
-    { label: 'Cartera / CxC',   path: '/receivables',  icon: FileText },
-    { label: 'Configuración',   path: '/settings',     icon: Settings },
+    { label: 'Dashboard',          path: '/',           icon: LayoutDashboard },
+    { label: 'Punto de Venta',     path: '/pos',         icon: ShoppingCart },
+    { label: 'Control de Caja',    path: '/cash-control',icon: Landmark },
+    { label: 'Inventario',         path: '/inventory',   icon: Package },
+    { label: 'Historial Facturas', path: '/invoices',    icon: Receipt },
+    { label: 'Servicio Tecnico',   path: '/repairs',     icon: Wrench },
+    { label: 'Cartera / CxC',      path: '/receivables', icon: FileText },
+    { label: 'Configuracion',      path: '/settings',    icon: Settings },
   ];
 
   const isActive = (path: string) => location.pathname === path;
 
-  // Nombre seguro mientras carga
   const companyName = company?.name ?? 'IPHONESHOP USA';
   const logoUrl     = company?.logo_url ?? null;
 
@@ -87,7 +87,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               className="bg-transparent text-sm font-medium text-white focus:outline-none w-full cursor-pointer"
             >
               <option value="COP" className="text-slate-900">COP (Peso)</option>
-              <option value="USD" className="text-slate-900">USD (Dólar)</option>
+              <option value="USD" className="text-slate-900">USD (Dolar)</option>
               <option value="EUR" className="text-slate-900">EUR (Euro)</option>
             </select>
           </div>
@@ -107,7 +107,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             className="flex w-full items-center gap-3 px-4 py-2 text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"
           >
             <LogOut size={20} />
-            <span className="font-medium">Cerrar Sesión</span>
+            <span className="font-medium">Cerrar Sesion</span>
           </button>
         </div>
       </aside>
@@ -116,7 +116,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/90 md:hidden flex flex-col p-4">
           <div className="flex justify-end mb-8">
-            <button onClick={() => setIsMobileMenuOpen(false)} className="text-white text-lg font-bold">✕</button>
+            <button onClick={() => setIsMobileMenuOpen(false)} className="text-white text-lg font-bold">x</button>
           </div>
           {navItems.map((item) => (
             <Link
@@ -136,11 +136,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               className="w-full bg-slate-800 text-white p-3 rounded-lg"
             >
               <option value="COP">COP (Colombia)</option>
-              <option value="USD">USD (Dólar)</option>
+              <option value="USD">USD (Dolar)</option>
             </select>
           </div>
           <button onClick={handleLogout} className="mt-4 flex items-center gap-3 text-red-400 py-3">
-            <LogOut size={20} /> Cerrar Sesión
+            <LogOut size={20} /> Cerrar Sesion
           </button>
         </div>
       )}
