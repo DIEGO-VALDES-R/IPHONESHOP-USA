@@ -42,11 +42,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <aside className="hidden md:flex flex-col w-64 bg-slate-900 text-white shadow-xl">
         <div className="p-6 border-b border-slate-700">
           <div className="flex items-center gap-3">
-            <div className="bg-blue-600 p-2 rounded-lg flex items-center justify-center overflow-hidden w-12 h-12 flex-shrink-0">
-              {logoUrl
-                ? <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" />
-                : <Building2 size={24} className="text-white" />}
-            </div>
+            <div className={`${logoUrl ? 'bg-white' : 'bg-blue-600'} p-2 rounded-lg flex items-center justify-center overflow-hidden w-12 h-12 flex-shrink-0`}>
+  {logoUrl
+    ? <img src={logoUrl} alt="Logo" className="w-full h-full object-contain mix-blend-multiply" />
+    : <Building2 size={24} className="text-white" />}
+</div>
             <div>
               <h1 className="font-bold text-lg tracking-tight leading-tight line-clamp-1" title={companyName}>
                 {companyName}
