@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Edit2, Trash2, X, Package, Upload, Image as ImageIcon } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, X, Package, Upload, Image as ImageIcon, ChevronDown, List, Grid3x3, ArrowLeft } from 'lucide-react';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { productService, Product } from '../services/productService';
 import { useCompany } from '../hooks/useCompany';
@@ -31,6 +31,8 @@ const Inventory: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'category'>('list');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const load = async () => {
     if (!companyId) return;
@@ -120,6 +122,16 @@ const Inventory: React.FC = () => {
     );
   });
 
+  // Agrupar productos por categoría
+  const groupedByCategory = filtered.reduce((acc, product) => {
+    const category = product.category || 'Sin Categoría';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(product);
+    return acc;
+  }, {} as Record<string, Product[]>);
+
   // Helper para actualizar campos de texto/select
   const f = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const val = e.target.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value;
@@ -134,6 +146,114 @@ const Inventory: React.FC = () => {
       [key]: raw === '' ? 0 : parseFloat(raw) || 0,
     }));
   };
+
+  // Componente para renderizar una fila de producto
+  const ProductRow = ({ p }: { p: Product }) => (
+    <tr className="hover:bg-slate-50">
+      <td className="px-4 py-3">
+        {(p as any).image_url ? (
+          <img src={(p as any).image_url} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-slate-200" />
+        ) : (
+          <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
+            <Package size={16} className="text-slate-400" />
+          </div>
+        )}
+      </td>
+      <td className="px-4 py-3 font-medium text-slate-900">{p.name}</td>
+      <td className="px-4 py-3 text-slate-500 font-mono text-xs">{p.sku}</td>
+      <td className="px-4 py-3 text-slate-500">{p.category || '—'}</td>
+      <td className="px-4 py-3 font-semibold text-slate-800">{formatMoney(p.price)}</td>
+      <td className="px-4 py-3 text-slate-500">{formatMoney(p.cost)}</td>
+      <td className="px-4 py-3">
+        <span className={`font-bold ${(p.stock_quantity||0) <= (p.stock_min||5) ? 'text-red-600' : 'text-green-600'}`}>
+          {p.stock_quantity ?? 0}
+        </span>
+      </td>
+      <td className="px-4 py-3"><span className="px-2 py-0.5 rounded-full text-xs bg-slate-100 text-slate-600">{p.type}</span></td>
+      <td className="px-4 py-3">
+        <div className="flex gap-2">
+          <button onClick={() => openEdit(p)} className="text-blue-600 hover:text-blue-800"><Edit2 size={15} /></button>
+          <button onClick={() => handleDelete(p.id!)} className="text-red-500 hover:text-red-700"><Trash2 size={15} /></button>
+        </div>
+      </td>
+    </tr>
+  );
+
+  // Componente para tarjeta de producto en cuadrícula
+  const ProductCard = ({ p }: { p: Product }) => (
+    <div className="bg-white rounded-lg border border-slate-200 hover:shadow-lg hover:border-blue-300 transition-all overflow-hidden group">
+      {/* Imagen del producto */}
+      <div className="relative h-40 bg-slate-100 overflow-hidden">
+        {(p as any).image_url ? (
+          <img src={(p as any).image_url} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Package size={32} className="text-slate-300" />
+          </div>
+        )}
+        {/* Badge de stock */}
+        <div className={`absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-semibold ${
+          (p.stock_quantity||0) <= (p.stock_min||5)
+            ? 'bg-red-100 text-red-700'
+            : 'bg-green-100 text-green-700'
+        }`}>
+          Stock: {p.stock_quantity ?? 0}
+        </div>
+      </div>
+
+      {/* Contenido */}
+      <div className="p-4 space-y-3">
+        <div>
+          <h4 className="font-semibold text-slate-900 line-clamp-2 text-sm">{p.name}</h4>
+          <p className="text-xs text-slate-500 font-mono mt-1">{p.sku}</p>
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-slate-500">Precio:</span>
+            <span className="font-bold text-blue-600">{formatMoney(p.price)}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-slate-500">Costo:</span>
+            <span className="text-xs text-slate-600">{formatMoney(p.cost)}</span>
+          </div>
+        </div>
+
+        <div className="flex gap-1 pt-2">
+          <span className="px-2 py-1 rounded text-xs bg-slate-100 text-slate-600 flex-1 text-center">{p.type}</span>
+          {p.category && <span className="px-2 py-1 rounded text-xs bg-blue-50 text-blue-600 flex-1 text-center truncate">{p.category}</span>}
+        </div>
+
+        {/* Acciones */}
+        <div className="flex gap-2 pt-2 border-t border-slate-100">
+          <button onClick={() => openEdit(p)} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 rounded transition-colors">
+            <Edit2 size={14} /> Editar
+          </button>
+          <button onClick={() => handleDelete(p.id!)} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm bg-red-50 text-red-600 hover:bg-red-100 rounded transition-colors">
+            <Trash2 size={14} /> Eliminar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Componente para tarjeta de categoría
+  const CategoryCard = ({ category, count }: { category: string; count: number }) => (
+    <button
+      onClick={() => setSelectedCategory(category)}
+      className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl p-6 hover:shadow-lg hover:scale-105 transition-all text-left group"
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-xl font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{category}</h3>
+          <p className="text-sm text-slate-600 mt-1">{count} producto{count !== 1 ? 's' : ''}</p>
+        </div>
+        <div className="text-3xl text-blue-300 group-hover:text-blue-400 transition-colors">
+          <Package size={40} />
+        </div>
+      </div>
+    </button>
+  );
 
   return (
     <div className="space-y-6">
@@ -154,6 +274,36 @@ const Inventory: React.FC = () => {
           className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
       </div>
 
+      {/* Botones para cambiar vista */}
+      <div className="flex gap-3">
+        <button
+          onClick={() => {
+            setViewMode('list');
+            setSelectedCategory(null);
+          }}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all ${
+            viewMode === 'list'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+          }`}
+        >
+          <List size={16} /> Vista Lista
+        </button>
+        <button
+          onClick={() => {
+            setViewMode('category');
+            setSelectedCategory(null);
+          }}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all ${
+            viewMode === 'category'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+          }`}
+        >
+          <Grid3x3 size={16} /> Por Categoría
+        </button>
+      </div>
+
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         {loading ? (
           <div className="p-12 text-center text-slate-400">Cargando productos...</div>
@@ -162,7 +312,8 @@ const Inventory: React.FC = () => {
             <Package size={40} className="mx-auto mb-3 opacity-30" />
             <p>No hay productos. Crea el primero.</p>
           </div>
-        ) : (
+        ) : viewMode === 'list' ? (
+          // VISTA LISTA
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>{['Foto','Producto','SKU','Categoría','Precio','Costo','Stock','Tipo',''].map(h => (
@@ -171,37 +322,43 @@ const Inventory: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.map(p => (
-                <tr key={p.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3">
-                    {(p as any).image_url ? (
-                      <img src={(p as any).image_url} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-slate-200" />
-                    ) : (
-                      <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
-                        <Package size={16} className="text-slate-400" />
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">{p.name}</td>
-                  <td className="px-4 py-3 text-slate-500 font-mono text-xs">{p.sku}</td>
-                  <td className="px-4 py-3 text-slate-500">{p.category || '—'}</td>
-                  <td className="px-4 py-3 font-semibold text-slate-800">{formatMoney(p.price)}</td>
-                  <td className="px-4 py-3 text-slate-500">{formatMoney(p.cost)}</td>
-                  <td className="px-4 py-3">
-                    <span className={`font-bold ${(p.stock_quantity||0) <= (p.stock_min||5) ? 'text-red-600' : 'text-green-600'}`}>
-                      {p.stock_quantity ?? 0}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3"><span className="px-2 py-0.5 rounded-full text-xs bg-slate-100 text-slate-600">{p.type}</span></td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <button onClick={() => openEdit(p)} className="text-blue-600 hover:text-blue-800"><Edit2 size={15} /></button>
-                      <button onClick={() => handleDelete(p.id!)} className="text-red-500 hover:text-red-700"><Trash2 size={15} /></button>
-                    </div>
-                  </td>
-                </tr>
+                <ProductRow key={p.id} p={p} />
               ))}
             </tbody>
           </table>
+        ) : selectedCategory ? (
+          // VISTA DE PRODUCTOS DE CATEGORÍA SELECCIONADA
+          <div className="p-6 space-y-6">
+            {/* Botón para volver */}
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className="flex items-center gap-2 px-4 py-2 text-blue-600 hover:text-blue-800 font-medium text-sm hover:bg-blue-50 rounded-lg transition-colors"
+            >
+              <ArrowLeft size={16} /> Volver a Categorías
+            </button>
+
+            {/* Encabezado */}
+            <div className="border-b-2 border-slate-200 pb-4">
+              <h3 className="text-2xl font-bold text-slate-900">{selectedCategory}</h3>
+              <p className="text-slate-500 mt-1">{groupedByCategory[selectedCategory]?.length || 0} productos</p>
+            </div>
+
+            {/* Cuadrícula de productos */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {(groupedByCategory[selectedCategory] || []).map(p => (
+                <ProductCard key={p.id} p={p} />
+              ))}
+            </div>
+          </div>
+        ) : (
+          // VISTA DE CUADRÍCULA DE CATEGORÍAS
+          <div className="p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {Object.entries(groupedByCategory).map(([category, products]) => (
+                <CategoryCard key={category} category={category} count={products.length} />
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
