@@ -1,10 +1,11 @@
 ﻿import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Smartphone, X, Printer, Barcode } from 'lucide-react';
+import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Smartphone, X, Printer, Barcode, Zap } from 'lucide-react';
 import { Product, ProductType, CartItem, PaymentMethod, Sale } from '../types';
 import { toast, Toaster } from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
+import { useBarcodeScanner } from '../hooks/useBarcodeScanner';
 import InvoiceModal from '../components/InvoiceModal';
 
 const POS: React.FC = () => {
@@ -32,6 +33,17 @@ const POS: React.FC = () => {
   const [payments, setPayments] = useState<{method: PaymentMethod, amount: number}[]>([]);
   const [currentPaymentAmount, setCurrentPaymentAmount] = useState('');
   const [currentPaymentMethod, setCurrentPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
+
+  // Hook para detectar escaneos de códigos de barras en el POS
+  const { isScanning } = useBarcodeScanner((barcode) => {
+    const product = products.find(p => p.sku.toLowerCase() === barcode.toLowerCase());
+    if (product) {
+      addToCart(product);
+      setSearchTerm('');
+    } else {
+      toast.error(`Producto con SKU "${barcode}" no encontrado`);
+    }
+  });
 
   const filteredProducts = useMemo(() =>
     products.filter(p =>
@@ -157,6 +169,14 @@ const POS: React.FC = () => {
       <Toaster position="bottom-right" />
 
       <InvoiceModal isOpen={showInvoice} onClose={() => setShowInvoice(false)} sale={lastSale} company={company} />
+
+      {/* Indicador de escaneo activo */}
+      {isScanning && (
+        <div className="fixed top-4 left-4 flex items-center gap-2 px-4 py-2.5 bg-blue-50 border-2 border-blue-400 rounded-lg animate-pulse z-40">
+          <Zap size={16} className="text-blue-600 animate-spin" />
+          <span className="text-sm font-medium text-blue-600">Escaneando...</span>
+        </div>
+      )}
 
       {/* Catalogo */}
       <div className="flex-1 flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">

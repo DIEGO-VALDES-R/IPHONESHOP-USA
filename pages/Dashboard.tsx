@@ -34,18 +34,20 @@ const Dashboard: React.FC = () => {
   const { formatMoney } = useCurrency();
   const { products, repairs, sales, isLoading, company } = useDatabase();
   const [salesChart, setSalesChart] = useState<any[]>([]);
+  const [chartReady, setChartReady] = useState(false);
 
   useEffect(() => {
-    // Build chart data from real sales
-    const dayNames = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     const grouped: Record<string, number> = {};
-    // Initialize all days to 0
     dayNames.forEach(d => grouped[d] = 0);
     sales.forEach((s: any) => {
       const d = dayNames[new Date(s.created_at).getDay()];
       grouped[d] = (grouped[d] || 0) + (s.total_amount || 0);
     });
     setSalesChart(dayNames.map(name => ({ name, sales: grouped[name] })));
+    // Pequeño delay para que el contenedor ya tenga dimensiones en el DOM
+    const t = setTimeout(() => setChartReady(true), 50);
+    return () => clearTimeout(t);
   }, [sales]);
 
   const totalSales = sales.reduce((sum: number, s: any) => sum + (s.total_amount || 0), 0);
@@ -113,22 +115,32 @@ const Dashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-          <h3 className="font-bold text-lg text-slate-800 mb-6">Ventas por DÃ­a (esta semana)</h3>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={salesChart}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b' }}
-                  tickFormatter={(v) => v >= 1000000 ? `${v / 1000000}M` : `${v / 1000}K`} />
-                <Tooltip
-                  cursor={{ fill: '#f1f5f9' }}
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: number) => formatMoney(value)}
-                />
-                <Bar dataKey="sales" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
+          <h3 className="font-bold text-lg text-slate-800 mb-6">Ventas por Día (esta semana)</h3>
+          <div className="h-80 w-full">
+            {chartReady ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={salesChart}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} dy={10} />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#64748b' }}
+                    tickFormatter={(v) => v >= 1000000 ? `${v / 1000000}M` : `${v / 1000}K`}
+                  />
+                  <Tooltip
+                    cursor={{ fill: '#f1f5f9' }}
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    formatter={(value: number) => formatMoney(value)}
+                  />
+                  <Bar dataKey="sales" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-300">
+                Cargando gráfico...
+              </div>
+            )}
           </div>
         </div>
 
@@ -136,7 +148,7 @@ const Dashboard: React.FC = () => {
           <h3 className="font-bold text-lg text-slate-800 mb-6">Top Productos (por margen)</h3>
           <div className="space-y-4">
             {topProducts.length === 0 ? (
-              <p className="text-slate-400 text-sm text-center py-8">Sin productos aÃºn</p>
+              <p className="text-slate-400 text-sm text-center py-8">Sin productos aún</p>
             ) : topProducts.map((p, i) => (
               <div key={p.id} className="flex items-center gap-4 p-2 hover:bg-slate-50 rounded-lg">
                 <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">

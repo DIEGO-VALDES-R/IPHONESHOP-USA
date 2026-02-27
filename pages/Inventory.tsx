@@ -1,9 +1,10 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Edit2, Trash2, X, Package, Upload, Image as ImageIcon, ChevronDown, List, Grid3x3, ArrowLeft } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, X, Package, Upload, Image as ImageIcon, ChevronDown, List, Grid3x3, ArrowLeft, Zap } from 'lucide-react';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { productService, Product } from '../services/productService';
 import { useCompany } from '../hooks/useCompany';
 import { supabase } from '../supabaseClient';
+import { useBarcodeScanner } from '../hooks/useBarcodeScanner';
 import toast from 'react-hot-toast';
 
 const EMPTY_PRODUCT = {
@@ -33,6 +34,22 @@ const Inventory: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [viewMode, setViewMode] = useState<'list' | 'category'>('list');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [scannedProduct, setScannedProduct] = useState<Product | null>(null);
+  const [showBarcodeNotification, setShowBarcodeNotification] = useState(false);
+
+  // Hook para detectar escaneos de códigos de barras
+  const { isScanning } = useBarcodeScanner((barcode) => {
+    const product = products.find(p => p.sku.toLowerCase() === barcode.toLowerCase());
+    if (product) {
+      setScannedProduct(product);
+      setShowBarcodeNotification(true);
+      openEdit(product);
+      setTimeout(() => setShowBarcodeNotification(false), 3000);
+    } else {
+      toast.error(`Producto con SKU "${barcode}" no encontrado`);
+    }
+  });
 
   const load = async () => {
     if (!companyId) return;
@@ -262,9 +279,16 @@ const Inventory: React.FC = () => {
           <h2 className="text-2xl font-bold text-slate-800">Inventario</h2>
           <p className="text-slate-500">Gestión de productos y stock</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm">
-          <Plus size={16} /> Nuevo Producto
-        </button>
+        <div className="flex gap-2">
+          <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm">
+            <Plus size={16} /> Nuevo Producto
+          </button>
+          {scannedProduct && showBarcodeNotification && (
+            <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border-2 border-green-400 rounded-lg">
+              <span className="text-sm font-medium text-green-700">✓ Producto escaneado: {scannedProduct.name}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="relative">
@@ -273,6 +297,14 @@ const Inventory: React.FC = () => {
           placeholder="Buscar por nombre, SKU o categoría..."
           className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
       </div>
+
+      {/* Indicador de escaneo activo */}
+      {isScanning && (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-50 border-2 border-blue-400 rounded-lg animate-pulse">
+          <Zap size={16} className="text-blue-600 animate-spin" />
+          <span className="text-sm font-medium text-blue-600">Escaneando...</span>
+        </div>
+      )}
 
       {/* Botones para cambiar vista */}
       <div className="flex gap-3">
