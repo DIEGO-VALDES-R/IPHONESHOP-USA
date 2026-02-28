@@ -1,5 +1,5 @@
 ﻿import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Smartphone, X, Printer, Barcode, Zap } from 'lucide-react';
+import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Smartphone, X, Printer, Barcode, Zap, Tag } from 'lucide-react';
 import { Product, ProductType, CartItem, PaymentMethod, Sale } from '../types';
 import { toast, Toaster } from 'react-hot-toast';
 import { Link } from 'react-router-dom';
@@ -22,6 +22,11 @@ const POS: React.FC = () => {
   // IVA Toggle — usa la tasa configurada en Settings
   const defaultTaxRate = company?.config?.tax_rate ?? 19;
   const [applyIva, setApplyIva] = useState(true);
+
+  // ── DESCUENTO GLOBAL DEL CARRITO ──────────────────────────────────────────
+  const [globalDiscount, setGlobalDiscount] = useState<string>('');   // string para el input
+  const globalDiscountNum = parseFloat(globalDiscount) || 0;
+  const clampedDiscount = Math.min(Math.max(globalDiscountNum, 0), 100); // 0–100%
 
   // Datos cliente
   const [customerName, setCustomerName] = useState('');
@@ -55,14 +60,15 @@ const POS: React.FC = () => {
     ), [searchTerm, products]);
 
   const totals = useMemo(() => {
-    const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-    // CORRECCIÓN: cuando applyIva es true pero defaultTaxRate es 0, tax queda en 0
+    const subtotalBruto = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    const discountAmount = subtotalBruto * (clampedDiscount / 100);
+    const subtotal = subtotalBruto - discountAmount;
     const tax = applyIva ? subtotal * (defaultTaxRate / 100) : 0;
     const total = subtotal + tax;
     const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
     const remaining = total - totalPaid;
-    return { subtotal, tax, total, totalPaid, remaining };
-  }, [cart, payments, applyIva, defaultTaxRate]);
+    return { subtotalBruto, discountAmount, subtotal, tax, total, totalPaid, remaining };
+  }, [cart, payments, applyIva, defaultTaxRate, clampedDiscount]);
 
   useEffect(() => {
     if (session?.status === 'OPEN' && !isPaymentModalOpen && !showInvoice) {
@@ -126,8 +132,6 @@ const POS: React.FC = () => {
   const handleFinalizeSale = async () => {
     if (Math.abs(totals.remaining) > 100) { toast.error('Debe cubrir el total de la venta'); return; }
 
-    // CORRECCIÓN PRINCIPAL: enviar subtotal y taxAmount ya calculados por el POS
-    // para que DatabaseContext no los recalcule con 1.19 fijo
     const sale = await processSale({
       customer: customerName || 'Consumidor Final',
       customerDoc,
@@ -135,14 +139,17 @@ const POS: React.FC = () => {
       customerPhone,
       items: cart,
       total: totals.total,
-      subtotal: totals.subtotal,   // ← NUEVO: subtotal real del POS
-      taxAmount: totals.tax,       // ← NUEVO: tax real del POS (0 si IVA apagado)
+      subtotal: totals.subtotal,
+      taxAmount: totals.tax,
       applyIva,
+      discountPercent: clampedDiscount,
+      discountAmount: totals.discountAmount,
     });
 
-    setLastSale(sale);
+    setLastSale({ ...sale, discountPercent: clampedDiscount, discountAmount: totals.discountAmount } as any);
     setShowInvoice(true);
     setCart([]); setPayments([]);
+    setGlobalDiscount('');
     setCustomerName(''); setCustomerDoc(''); setCustomerEmail(''); setCustomerPhone('');
     setIsPaymentModalOpen(false);
   };
@@ -280,11 +287,48 @@ const POS: React.FC = () => {
             </div>
           </button>
 
+          {/* ── DESCUENTO GLOBAL ─────────────────────────────────────── */}
+          <div className={`mb-3 rounded-lg border-2 transition-all ${clampedDiscount > 0 ? 'bg-orange-50 border-orange-400' : 'bg-slate-50 border-slate-200'}`}>
+            <div className="flex items-center gap-2 px-3 py-2">
+              <Tag size={15} className={clampedDiscount > 0 ? 'text-orange-500' : 'text-slate-400'} />
+              <span className={`text-sm font-medium flex-1 ${clampedDiscount > 0 ? 'text-orange-700' : 'text-slate-600'}`}>
+                Descuento
+              </span>
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={globalDiscount}
+                  onChange={e => setGlobalDiscount(e.target.value)}
+                  placeholder="0"
+                  className={`w-16 text-right px-2 py-1 rounded-lg border text-sm font-bold outline-none focus:ring-2 focus:ring-orange-400 ${
+                    clampedDiscount > 0 ? 'bg-white border-orange-300 text-orange-700' : 'bg-white border-slate-300 text-slate-700'
+                  }`}
+                />
+                <span className={`text-sm font-bold ${clampedDiscount > 0 ? 'text-orange-600' : 'text-slate-500'}`}>%</span>
+              </div>
+            </div>
+            {clampedDiscount > 0 && (
+              <div className="px-3 pb-2 flex justify-between text-xs text-orange-600 font-medium">
+                <span>Ahorro del cliente:</span>
+                <span>- {formatMoney(totals.discountAmount)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* TOTALES */}
           <div className="space-y-1 text-sm mb-4">
             <div className="flex justify-between text-slate-500">
               <span>Subtotal</span>
-              <span>{formatMoney(totals.subtotal)}</span>
+              <span>{formatMoney(totals.subtotalBruto)}</span>
             </div>
+            {clampedDiscount > 0 && (
+              <div className="flex justify-between text-orange-600 font-medium">
+                <span>Descuento ({clampedDiscount}%)</span>
+                <span>- {formatMoney(totals.discountAmount)}</span>
+              </div>
+            )}
             <div className={`flex justify-between ${applyIva && defaultTaxRate > 0 ? 'text-slate-500' : 'text-slate-300'}`}>
               <span>IVA ({applyIva ? defaultTaxRate : 0}%)</span>
               <span>{applyIva && defaultTaxRate > 0 ? formatMoney(totals.tax) : '$ 0'}</span>
@@ -335,12 +379,29 @@ const POS: React.FC = () => {
 
               <div className="flex gap-8 mb-8">
                 <div className="flex-1">
-                  <h4 className="text-sm font-bold text-slate-500 mb-2">Total a Pagar</h4>
-                  <div className="text-3xl font-bold text-slate-800">{formatMoney(totals.total)}</div>
-                  <div className={`text-xs mt-1 font-medium ${applyIva && defaultTaxRate > 0 ? 'text-green-600' : 'text-slate-400'}`}>
-                    {applyIva && defaultTaxRate > 0 ? `IVA ${defaultTaxRate}% incluido` : 'Sin IVA'}
+                  <h4 className="text-sm font-bold text-slate-500 mb-2">Resumen de Venta</h4>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2 mb-4">
+                    <div className="flex justify-between text-sm text-slate-600">
+                      <span>Subtotal:</span>
+                      <span>{formatMoney(totals.subtotalBruto)}</span>
+                    </div>
+                    {clampedDiscount > 0 && (
+                      <div className="flex justify-between text-sm text-orange-600 font-semibold">
+                        <span>Descuento ({clampedDiscount}%):</span>
+                        <span>- {formatMoney(totals.discountAmount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm text-slate-600">
+                      <span>IVA {applyIva && defaultTaxRate > 0 ? `(${defaultTaxRate}%)` : ''}:</span>
+                      <span>{applyIva && defaultTaxRate > 0 ? formatMoney(totals.tax) : '$ 0'}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-xl text-slate-800 pt-2 border-t border-slate-200">
+                      <span>TOTAL:</span>
+                      <span className="text-blue-700">{formatMoney(totals.total)}</span>
+                    </div>
                   </div>
-                  <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
                     <h5 className="text-xs font-bold text-slate-500 uppercase mb-2">Pagos Agregados</h5>
                     {payments.length === 0 ? (
                       <p className="text-sm text-slate-400 italic">Sin pagos registrados</p>
