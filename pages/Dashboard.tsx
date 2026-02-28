@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer
@@ -7,7 +7,7 @@ import { DollarSign, TrendingUp, Package, AlertCircle } from 'lucide-react';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
 
-const StatCard = ({ title, value, subtext, icon: Icon, color = 'blue' }: any) => {
+const StatCard = ({ title, value, subtext, icon: Icon, color = 'blue', extra }: any) => {
   const colors: Record<string, string> = {
     blue: 'bg-blue-100 text-blue-600',
     green: 'bg-green-100 text-green-600',
@@ -26,6 +26,7 @@ const StatCard = ({ title, value, subtext, icon: Icon, color = 'blue' }: any) =>
         </div>
       </div>
       <p className="text-slate-400 text-sm mt-4">{subtext}</p>
+      {extra && <p className="text-slate-300 text-xs mt-1">{extra}</p>}
     </div>
   );
 };
@@ -45,13 +46,25 @@ const Dashboard: React.FC = () => {
       grouped[d] = (grouped[d] || 0) + (s.total_amount || 0);
     });
     setSalesChart(dayNames.map(name => ({ name, sales: grouped[name] })));
-    // Pequeño delay para que el contenedor ya tenga dimensiones en el DOM
     const t = setTimeout(() => setChartReady(true), 50);
     return () => clearTimeout(t);
   }, [sales]);
 
   const totalSales = sales.reduce((sum: number, s: any) => sum + (s.total_amount || 0), 0);
-  const inventoryValue = products.reduce((sum, p) => sum + (p.cost * (p.stock_quantity || 0)), 0);
+
+  // ── INVENTARIO CORREGIDO ──────────────────────────────────────────────────
+  // Total unidades físicas reales (suma de stock de todas las referencias)
+  const totalUnidades = products.reduce((sum, p) => sum + (p.stock_quantity || 0), 0);
+
+  // Inventario valorizado a PRECIO DE VENTA (valor comercial real)
+  const inventoryValuePrecio = products.reduce((sum, p) => sum + (p.price * (p.stock_quantity || 0)), 0);
+
+  // Inventario valorizado a COSTO (lo que costó)
+  const inventoryValueCosto = products.reduce((sum, p) => sum + (p.cost * (p.stock_quantity || 0)), 0);
+
+  // Ganancia potencial si se vende todo
+  const gananciaPotencial = inventoryValuePrecio - inventoryValueCosto;
+
   const activeRepairs = repairs.filter((r: any) =>
     !['DELIVERED', 'CANCELLED'].includes(r.status)
   ).length;
@@ -101,8 +114,9 @@ const Dashboard: React.FC = () => {
         />
         <StatCard
           title="Inventario Valorizado"
-          value={formatMoney(inventoryValue)}
-          subtext={`${products.length} productos activos`}
+          value={formatMoney(inventoryValuePrecio)}
+          subtext={`${totalUnidades} unidades · ${products.length} referencias`}
+          extra={`Costo: ${formatMoney(inventoryValueCosto)}`}
           icon={Package} color="purple"
         />
         <StatCard
@@ -111,6 +125,32 @@ const Dashboard: React.FC = () => {
           subtext={`${urgentRepairs} listas para entregar`}
           icon={AlertCircle} color="orange"
         />
+      </div>
+
+      {/* ── FILA DE RESUMEN DE INVENTARIO ─────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 flex justify-between items-center">
+          <div>
+            <p className="text-xs font-semibold text-purple-500 uppercase tracking-wide">Valor a Precio Venta</p>
+            <p className="text-xl font-bold text-purple-700 mt-1">{formatMoney(inventoryValuePrecio)}</p>
+          </div>
+          <div className="text-3xl text-purple-300">📦</div>
+        </div>
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex justify-between items-center">
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Valor a Costo</p>
+            <p className="text-xl font-bold text-slate-700 mt-1">{formatMoney(inventoryValueCosto)}</p>
+          </div>
+          <div className="text-3xl text-slate-300">🏷️</div>
+        </div>
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex justify-between items-center">
+          <div>
+            <p className="text-xs font-semibold text-green-500 uppercase tracking-wide">Ganancia Potencial</p>
+            <p className="text-xl font-bold text-green-700 mt-1">{formatMoney(gananciaPotencial)}</p>
+            <p className="text-xs text-green-400 mt-0.5">Si se vende todo el stock</p>
+          </div>
+          <div className="text-3xl text-green-300">💰</div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -156,7 +196,8 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="font-medium text-slate-800 truncate">{p.name}</h4>
-                  <p className="text-xs text-slate-400">Stock: {p.stock_quantity ?? 0}</p>
+                  <p className="text-xs text-slate-400">Stock: {p.stock_quantity ?? 0} uds</p>
+                  <p className="text-xs text-green-500">Margen: {formatMoney(p.price - p.cost)}</p>
                 </div>
                 <span className="font-bold text-slate-700 text-sm">{formatMoney(p.price)}</span>
               </div>
