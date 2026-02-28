@@ -1,4 +1,4 @@
-﻿import React, { useRef, useState } from 'react';
+ import React, { useRef, useState } from 'react';
 import {
   X, Printer, QrCode, MessageCircle, Mail,
   CheckCircle, XCircle, Clock, AlertTriangle,
@@ -36,6 +36,9 @@ interface SaleData {
   items?: SaleItem[];
   invoice_items?: SaleItem[];
   _cartItems?: SaleItem[];
+  // ── Descuento global ─────────────────────────────────────────────────────
+  discountPercent?: number;
+  discountAmount?: number;
 }
 
 interface CompanyData {
@@ -79,11 +82,13 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
     discount: item.discount || 0,
   }));
 
-  const subtotal = sale.subtotal != null
-    ? sale.subtotal
-    : items.reduce((acc, i) => acc + i.price * i.quantity, 0);
+  const subtotalBruto = items.reduce((acc, i) => acc + i.price * i.quantity, 0);
+  const discountPercent = sale.discountPercent ?? 0;
+  const discountAmount = sale.discountAmount ?? (subtotalBruto * discountPercent / 100);
+  const subtotal = sale.subtotal != null ? sale.subtotal : subtotalBruto - discountAmount;
   const taxAmount = sale.tax_amount != null ? sale.tax_amount : 0;
   const showIva = taxAmount > 0;
+  const showDiscount = discountPercent > 0 || discountAmount > 0;
   const companyName = company?.name ?? 'IPHONESHOP USA';
 
   // ── Captura el elemento completo (sin corte por scroll) ──────────────────
@@ -181,6 +186,7 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
       const finalPhone = phone && phone.length === 10 ? `57${phone}` : phone;
 
       let msg = `Hola ${sale.customer_name || 'Cliente'} 👋\n\nTe enviamos tu factura *${sale.invoice_number}* de *${companyName}*.\n\n💰 Total: *${formatMoney(sale.total_amount)}*`;
+      if (showDiscount) msg += `\n🏷️ Descuento aplicado: *${discountPercent}%* (- ${formatMoney(discountAmount)})`;
       if (url) msg += `\n\n📄 Ver y descargar tu factura:\n${url}`;
       msg += `\n\n¡Gracias por tu compra! 🙏`;
 
@@ -209,6 +215,7 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
 
       const subject = encodeURIComponent(`Factura ${sale.invoice_number} - ${companyName}`);
       let bodyText = `Hola ${sale.customer_name || 'Cliente'},\n\nGracias por tu compra en ${companyName}.\n\nFactura: ${sale.invoice_number}\nTotal: ${formatMoney(sale.total_amount)}`;
+      if (showDiscount) bodyText += `\nDescuento aplicado: ${discountPercent}% (- ${formatMoney(discountAmount)})`;
       if (url) bodyText += `\n\nDescarga tu factura PDF aqui:\n${url}`;
       bodyText += `\n\n¡Gracias por preferirnos!\n${companyName}\nTel: ${company?.phone || ''}\n${company?.email || ''}`;
 
@@ -253,42 +260,22 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
             {getStatusBadge()}
           </div>
           <div className="flex gap-2 flex-wrap justify-end">
-            {/* WhatsApp */}
-            <button
-              onClick={handleWhatsApp}
-              disabled={generatingPdf}
-              title="Enviar por WhatsApp con link PDF"
-              className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 transition-colors"
-            >
+            <button onClick={handleWhatsApp} disabled={generatingPdf} title="Enviar por WhatsApp con link PDF"
+              className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 transition-colors">
               {generatingPdf ? <Loader size={18} className="animate-spin" /> : <MessageCircle size={18} />}
             </button>
-            {/* Email */}
-            <button
-              onClick={handleEmail}
-              disabled={generatingPdf}
-              title="Enviar por Email con link PDF"
-              className="p-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50 transition-colors"
-            >
+            <button onClick={handleEmail} disabled={generatingPdf} title="Enviar por Email con link PDF"
+              className="p-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50 transition-colors">
               {generatingPdf ? <Loader size={18} className="animate-spin" /> : <Mail size={18} />}
             </button>
-            {/* Descargar PDF */}
-            <button
-              onClick={handleDownloadPdf}
-              disabled={generatingPdf}
-              title="Descargar PDF"
-              className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
-            >
+            <button onClick={handleDownloadPdf} disabled={generatingPdf} title="Descargar PDF"
+              className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors">
               {generatingPdf ? <Loader size={18} className="animate-spin" /> : <Download size={18} />}
             </button>
-            {/* Imprimir */}
-            <button
-              onClick={handlePrint}
-              title="Imprimir"
-              className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
+            <button onClick={handlePrint} title="Imprimir"
+              className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
               <Printer size={18} />
             </button>
-            {/* Cerrar */}
             <button onClick={onClose} className="p-2 text-slate-500 hover:bg-slate-200 rounded-lg">
               <X size={18} />
             </button>
@@ -325,13 +312,8 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
           <div className="text-center mb-6">
             {company?.logo_url && (
               <div className="flex justify-center mb-4">
-                <img
-                  src={company.logo_url}
-                  alt="Logo"
-                  crossOrigin="anonymous"
-                  className="w-auto object-contain"
-                  style={{ height: '90px', maxWidth: '220px' }}
-                />
+                <img src={company.logo_url} alt="Logo" crossOrigin="anonymous"
+                  className="w-auto object-contain" style={{ height: '90px', maxWidth: '220px' }} />
               </div>
             )}
             <h2 className="font-bold text-xl uppercase mb-1">{companyName}</h2>
@@ -385,6 +367,7 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
                   <td className="py-2 align-top">
                     <div>{item.product_name}</div>
                     {item.serial_number && <div className="text-[10px] text-slate-500">SN: {item.serial_number}</div>}
+                    <div className="text-[10px] text-slate-400">{formatMoney(item.price)} c/u</div>
                   </td>
                   <td className="py-2 text-right align-top">{formatMoney(item.price * item.quantity)}</td>
                 </tr>
@@ -392,12 +375,29 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
             </tbody>
           </table>
 
-          {/* Totales */}
+          {/* ── Totales con descuento ─────────────────────────────────── */}
           <div className="space-y-1 mb-6 border-t border-black pt-2 text-xs">
             <div className="flex justify-between">
               <span>Subtotal:</span>
-              <span>{formatMoney(subtotal)}</span>
+              <span>{formatMoney(subtotalBruto)}</span>
             </div>
+
+            {/* DESCUENTO — solo se muestra si aplica */}
+            {showDiscount && (
+              <div className="flex justify-between font-bold text-slate-700">
+                <span>Descuento ({discountPercent}%):</span>
+                <span>- {formatMoney(discountAmount)}</span>
+              </div>
+            )}
+
+            {/* Subtotal después del descuento (solo si hay descuento) */}
+            {showDiscount && (
+              <div className="flex justify-between text-slate-600">
+                <span>Subtotal c/desc.:</span>
+                <span>{formatMoney(subtotal)}</span>
+              </div>
+            )}
+
             {showIva ? (
               <div className="flex justify-between text-slate-600">
                 <span>IVA:</span>
@@ -409,10 +409,20 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
                 <span>No aplica</span>
               </div>
             )}
+
             <div className="flex justify-between font-bold text-base mt-2 pt-2 border-t border-slate-300">
               <span>TOTAL A PAGAR:</span>
               <span>{formatMoney(sale.total_amount)}</span>
             </div>
+
+            {/* Badge de ahorro */}
+            {showDiscount && (
+              <div className="mt-2 bg-orange-50 border border-orange-200 rounded px-2 py-1.5 text-center">
+                <span className="text-[11px] font-bold text-orange-700">
+                  🏷️ AHORRO: {formatMoney(discountAmount)} ({discountPercent}% de descuento)
+                </span>
+              </div>
+            )}
           </div>
 
           {/* DIAN / QR */}
