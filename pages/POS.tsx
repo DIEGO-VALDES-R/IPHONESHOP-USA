@@ -146,7 +146,7 @@ const POS: React.FC = () => {
       discountAmount: totals.discountAmount,
     });
 
-    setLastSale({ ...sale, discountPercent: clampedDiscount, discountAmount: totals.discountAmount } as any);
+    setLastSale({ ...sale, _cartItems: cart, discountPercent: clampedDiscount, discountAmount: totals.discountAmount } as any);
     setShowInvoice(true);
     setCart([]); setPayments([]);
     setGlobalDiscount('');

@@ -1,4 +1,4 @@
- import React, { useRef, useState } from 'react';
+﻿import React, { useRef, useState } from 'react';
 import {
   X, Printer, QrCode, MessageCircle, Mail,
   CheckCircle, XCircle, Clock, AlertTriangle,
@@ -71,10 +71,16 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
 
   if (!isOpen || !sale) return null;
 
+  const pm = (sale as any).payment_method || {};
+  const customerName = sale.customer_name || pm.customer_name || 'Consumidor Final';
+  const customerDoc = sale.customer_document || pm.customer_document || '222222222222';
+  const customerEmail = sale.customer_email || pm.customer_email || null;
+  const customerPhone = sale.customer_phone || pm.customer_phone || null;
+
   const items: SaleItem[] = (
     sale._cartItems || sale.items || sale.invoice_items || []
   ).map((item: any) => ({
-    product_name: item.product?.name || item.product_name || item.name || 'Producto',
+    product_name: item.product?.name || item.products?.name || item.product_name || item.name || 'Producto',
     quantity: item.quantity || 1,
     price: item.price || 0,
     tax_rate: item.tax_rate ?? 0,
@@ -182,10 +188,10 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
       let url = pdfUrl;
       if (!url) url = await generateAndUploadPdf();
 
-      const phone = sale.customer_phone?.replace(/\D/g, '');
+      const phone = customerPhone?.replace(/\D/g, '');
       const finalPhone = phone && phone.length === 10 ? `57${phone}` : phone;
 
-      let msg = `Hola ${sale.customer_name || 'Cliente'} 👋\n\nTe enviamos tu factura *${sale.invoice_number}* de *${companyName}*.\n\n💰 Total: *${formatMoney(sale.total_amount)}*`;
+      let msg = `Hola ${customerName || 'Cliente'} 👋\n\nTe enviamos tu factura *${sale.invoice_number}* de *${companyName}*.\n\n💰 Total: *${formatMoney(sale.total_amount)}*`;
       if (showDiscount) msg += `\n🏷️ Descuento aplicado: *${discountPercent}%* (- ${formatMoney(discountAmount)})`;
       if (url) msg += `\n\n📄 Ver y descargar tu factura:\n${url}`;
       msg += `\n\n¡Gracias por tu compra! 🙏`;
@@ -210,11 +216,11 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
       let url = pdfUrl;
       if (!url) url = await generateAndUploadPdf();
 
-      const target = sale.customer_email || prompt('Ingrese el correo del cliente:');
+      const target = customerEmail || prompt('Ingrese el correo del cliente:');
       if (!target) return;
 
       const subject = encodeURIComponent(`Factura ${sale.invoice_number} - ${companyName}`);
-      let bodyText = `Hola ${sale.customer_name || 'Cliente'},\n\nGracias por tu compra en ${companyName}.\n\nFactura: ${sale.invoice_number}\nTotal: ${formatMoney(sale.total_amount)}`;
+      let bodyText = `Hola ${customerName || 'Cliente'},\n\nGracias por tu compra en ${companyName}.\n\nFactura: ${sale.invoice_number}\nTotal: ${formatMoney(sale.total_amount)}`;
       if (showDiscount) bodyText += `\nDescuento aplicado: ${discountPercent}% (- ${formatMoney(discountAmount)})`;
       if (url) bodyText += `\n\nDescarga tu factura PDF aqui:\n${url}`;
       bodyText += `\n\n¡Gracias por preferirnos!\n${companyName}\nTel: ${company?.phone || ''}\n${company?.email || ''}`;
@@ -341,12 +347,18 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Cliente:</span>
-              <span className="font-bold uppercase">{sale.customer_name || 'Consumidor Final'}</span>
+              <span className="font-bold uppercase">{customerName}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">C.C./NIT:</span>
-              <span>{sale.customer_document || '222222222222'}</span>
+              <span>{customerDoc}</span>
             </div>
+            {customerPhone && (
+              <div className="flex justify-between">
+                <span className="text-slate-500">Telefono:</span>
+                <span>{customerPhone}</span>
+              </div>
+            )}
           </div>
 
           {/* Items */}
