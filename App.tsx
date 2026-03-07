@@ -174,6 +174,7 @@ const App: React.FC = () => {
   const [view, setView] = useState<AppView>('landing');
   const [userEmail, setUserEmail] = useState('');
   const [companyStatus, setCompanyStatus] = useState<string | null>(null);
+  const [previewCompanyId, setPreviewCompanyId] = useState<string | null>(null);
 
   const checkCompanyStatus = async (userId: string) => {
     const { data: profile } = await supabase
