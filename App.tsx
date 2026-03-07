@@ -11,7 +11,6 @@ import CashControl from './pages/CashControl';
 import AccountsReceivable from './pages/AccountsReceivable';
 import InvoiceHistory from './pages/InvoiceHistory';
 import Settings from './pages/Settings';
-import Branches from './pages/Branches';
 import { LandingPage, RegisterPage, AdminPanel } from './LandingPage';
 import { Toaster } from 'react-hot-toast';
 
@@ -21,8 +20,17 @@ const BOLD_PAYMENT_URL = 'https://checkout.bold.co/payment/LNK_U58X7N71NX';
 const CONTACT_EMAIL = 'diegoferrangel@gmail.com';
 
 // ── PANTALLA CUENTA PENDIENTE ─────────────────────────────────────────────────
-const PendingScreen: React.FC<{ email: string }> = ({ email }) => {
+const PendingScreen: React.FC<{ email: string; onRetry: () => void }> = ({ email, onRetry }) => {
+  const [checking, setChecking] = React.useState(false);
   const waMessage = encodeURIComponent(`Hola, soy ${email}. Me registré en POSmaster y quiero activar mi cuenta.`);
+
+  const handleRetry = async () => {
+    setChecking(true);
+    await new Promise(r => setTimeout(r, 500));
+    onRetry();
+    setChecking(false);
+  };
+
   return (
     <div style={{ minHeight: '100vh', background: '#0a0f1e', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: "'DM Sans','Segoe UI',sans-serif" }}>
       <div style={{ width: '100%', maxWidth: 460, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 24, padding: 40, textAlign: 'center' }}>
@@ -35,6 +43,11 @@ const PendingScreen: React.FC<{ email: string }> = ({ email }) => {
           Una vez confirmado tu pago, activaremos tu acceso en menos de 24 horas.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Botón verificar estado */}
+          <button onClick={handleRetry} disabled={checking}
+            style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', color: '#fff', padding: '14px', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer', opacity: checking ? 0.7 : 1 }}>
+            {checking ? '🔄 Verificando...' : '✓ Ya pagué — Verificar acceso'}
+          </button>
           <a href={BOLD_PAYMENT_URL} target="_blank" rel="noreferrer"
             style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', padding: '14px', borderRadius: 10, fontWeight: 700, fontSize: 15, textDecoration: 'none', display: 'block' }}>
             💳 Pagar con Bold
@@ -57,7 +70,9 @@ const PendingScreen: React.FC<{ email: string }> = ({ email }) => {
 };
 
 // ── PANTALLA SUSCRIPCIÓN VENCIDA ──────────────────────────────────────────────
-const PastDueScreen: React.FC<{ email: string }> = ({ email }) => {
+const PastDueScreen: React.FC<{ email: string; onRetry: () => void }> = ({ email, onRetry }) => {
+  const [checking, setChecking] = React.useState(false);
+  const handleRetry = async () => { setChecking(true); await new Promise(r => setTimeout(r, 500)); onRetry(); setChecking(false); };
   const waMessage = encodeURIComponent(`Hola, soy ${email}. Mi suscripción de POSmaster venció. Adjunto mi comprobante de pago para renovarla.`);
   return (
     <div style={{ minHeight: '100vh', background: '#0a0f1e', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: "'DM Sans','Segoe UI',sans-serif" }}>
@@ -71,6 +86,10 @@ const PastDueScreen: React.FC<{ email: string }> = ({ email }) => {
           Para continuar usando POSmaster realiza el pago y envía tu comprobante por WhatsApp. Activaremos tu cuenta en menos de 24 horas.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <button onClick={handleRetry} disabled={checking}
+            style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', color: '#fff', padding: '14px', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer', opacity: checking ? 0.7 : 1 }}>
+            {checking ? '🔄 Verificando...' : '✓ Ya pagué — Verificar acceso'}
+          </button>
           <a href={BOLD_PAYMENT_URL} target="_blank" rel="noreferrer"
             style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', padding: '14px', borderRadius: 10, fontWeight: 700, fontSize: 15, textDecoration: 'none', display: 'block' }}>
             💳 Pagar con Bold
@@ -147,7 +166,7 @@ const Login: React.FC<{ onShowLanding: () => void; onShowRegister: () => void }>
 };
 
 // ── APP ───────────────────────────────────────────────────────────────────────
-type AppView = 'landing' | 'login' | 'register' | 'app' | 'admin' | 'pending' | 'past_due' | 'preview';
+type AppView = 'landing' | 'login' | 'register' | 'app' | 'admin' | 'pending' | 'past_due';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
@@ -155,7 +174,6 @@ const App: React.FC = () => {
   const [view, setView] = useState<AppView>('landing');
   const [userEmail, setUserEmail] = useState('');
   const [companyStatus, setCompanyStatus] = useState<string | null>(null);
-  const [previewCompanyId, setPreviewCompanyId] = useState<string | null>(null);
 
   const checkCompanyStatus = async (userId: string) => {
     const { data: profile } = await supabase
@@ -173,6 +191,23 @@ const App: React.FC = () => {
       }
     }
     return company.subscription_status || null;
+  };
+
+  const retryCheck = async () => {
+    // Obtener sesión actual
+    const { data: { session: s } } = await supabase.auth.getSession();
+    if (!s) { setView('login'); return; }
+    // Consultar estado fresco directamente
+    const { data: profile } = await supabase
+      .from('profiles').select('company_id').eq('id', s.user.id).maybeSingle();
+    if (!profile?.company_id) { setView('pending'); return; }
+    const { data: company } = await supabase
+      .from('companies').select('subscription_status, subscription_end_date')
+      .eq('id', profile.company_id).maybeSingle();
+    if (!company) { setView('pending'); return; }
+    const status = company.subscription_status;
+    setCompanyStatus(status);
+    setView(resolveView(status));
   };
 
   const resolveView = (status: string | null): AppView => {
@@ -259,49 +294,7 @@ const App: React.FC = () => {
     return (
       <>
         <Toaster position="top-right" />
-        <AdminPanel
-          onExit={() => { supabase.auth.signOut(); }}
-          onPreview={(companyId: string) => { setPreviewCompanyId(companyId); setView('preview'); }}
-        />
-      </>
-    );
-  }
-
-  if (view === 'preview' && previewCompanyId) {
-    return (
-      <>
-        <Toaster position="top-right" />
-        {/* Barra de modo preview */}
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999, background: 'linear-gradient(135deg,#7c3aed,#4f46e5)', color: '#fff', padding: '10px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans','Segoe UI',sans-serif" }}>
-          <span>👁️ Modo Vista Previa — Estás viendo el panel del cliente (solo lectura)</span>
-          <button onClick={() => { setPreviewCompanyId(null); setView('admin'); }}
-            style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '6px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>
-            ← Volver al Panel Admin
-          </button>
-        </div>
-        <div style={{ paddingTop: 48 }}>
-          <Router>
-            <DatabaseProvider overrideCompanyId={previewCompanyId}>
-              <Routes>
-                <Route path="/*" element={
-                  <Layout onAdminPanel={undefined}>
-                    <Routes>
-                      <Route path="/"             element={<Dashboard />} />
-                      <Route path="/pos"          element={<POS />} />
-                      <Route path="/inventory"    element={<Inventory />} />
-                      <Route path="/repairs"      element={<Repairs />} />
-                      <Route path="/cash-control" element={<CashControl />} />
-                      <Route path="/receivables"  element={<AccountsReceivable />} />
-                      <Route path="/invoices"     element={<InvoiceHistory />} />
-                      <Route path="/settings"     element={<Settings />} />
-                      <Route path="/branches"     element={<Branches />} />
-                    </Routes>
-                  </Layout>
-                } />
-              </Routes>
-            </DatabaseProvider>
-          </Router>
-        </div>
+        <AdminPanel onExit={() => { supabase.auth.signOut(); }} />
       </>
     );
   }
@@ -319,7 +312,7 @@ const App: React.FC = () => {
     return (
       <>
         <Toaster position="top-right" />
-        <PendingScreen email={userEmail} />
+        <PendingScreen email={userEmail} onRetry={retryCheck} />
       </>
     );
   }
@@ -328,7 +321,7 @@ const App: React.FC = () => {
     return (
       <>
         <Toaster position="top-right" />
-        <PastDueScreen email={userEmail} />
+        <PastDueScreen email={userEmail} onRetry={retryCheck} />
       </>
     );
   }
@@ -369,7 +362,6 @@ const App: React.FC = () => {
                   <Route path="/receivables"  element={<AccountsReceivable />} />
                   <Route path="/invoices"     element={<InvoiceHistory />} />
                   <Route path="/settings"     element={<Settings />} />
-                  <Route path="/branches"     element={<Branches />} />
                 </Routes>
               </Layout>
             } />
