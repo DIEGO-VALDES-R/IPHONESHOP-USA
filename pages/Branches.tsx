@@ -102,6 +102,17 @@ const Branches: React.FC = () => {
     load();
   };
 
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`¿Eliminar la sucursal "${name}"? Esta acción no se puede deshacer.`)) return;
+    // Eliminar en orden por FK
+    await supabase.from('profiles').delete().eq('company_id', id);
+    await supabase.from('branches').delete().eq('company_id', id);
+    const { error } = await supabase.from('companies').delete().eq('id', id);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Sucursal "${name}" eliminada`);
+    load();
+  };
+
   const handleSuspend = async (id: string, current: string) => {
     const newStatus = current === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
     await supabase.from('companies').update({ subscription_status: newStatus }).eq('id', id);
@@ -226,6 +237,8 @@ const Branches: React.FC = () => {
                         </button>
                         <a href={`https://wa.me/573204884943?text=Soporte para sucursal ${b.name}`} target="_blank" rel="noreferrer"
                           className="px-3 py-1.5 text-xs font-bold text-green-600 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors">💬</a>
+                        <button onClick={() => handleDelete(b.id, b.name)}
+                          className="px-3 py-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors">🗑️</button>
                       </div>
                     </td>
                   </tr>
