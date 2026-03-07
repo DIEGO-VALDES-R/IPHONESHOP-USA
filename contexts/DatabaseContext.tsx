@@ -132,10 +132,10 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
         .from('profiles')
         .select('company_id, branch_id, role')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
       if (error || !profile) {
-        console.error('❌ Profile error:', error?.message);
+        console.warn('⚠️ Sin perfil para este usuario:', user.email);
         setIsLoading(false);
         return;
       }

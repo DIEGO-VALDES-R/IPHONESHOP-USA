@@ -294,7 +294,10 @@ const App: React.FC = () => {
     return (
       <>
         <Toaster position="top-right" />
-        <AdminPanel onExit={() => { supabase.auth.signOut(); }} />
+        <AdminPanel
+          onExit={() => { supabase.auth.signOut(); }}
+          onPreview={(companyId: string) => { setPreviewCompanyId(companyId); setView('preview'); }}
+        />
       </>
     );
   }
