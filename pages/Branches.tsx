@@ -16,7 +16,7 @@ const Branches: React.FC = () => {
   const [form, setForm] = useState({ name: '', nit: '', email: '', phone: '', adminEmail: '', adminPassword: '' });
   const [editForm, setEditForm] = useState({ name: '', nit: '', email: '', phone: '', subscription_status: 'ACTIVE' });
 
-  const isPro = company?.subscription_plan === 'PRO';
+  const isPro = ['PRO', 'MASTER', 'ENTERPRISE'].includes(company?.subscription_plan || '');
   const MAX_BRANCHES = 3;
 
   const load = async () => {
