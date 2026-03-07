@@ -4,7 +4,7 @@ import { useDatabase } from '../contexts/DatabaseContext';
 import { toast } from 'react-hot-toast';
 
 const Branches: React.FC = () => {
-  const { company } = useDatabase();
+  const { company, isLoading: ctxLoading } = useDatabase();
   const [branches, setBranches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('ALL');
@@ -113,6 +113,16 @@ const Branches: React.FC = () => {
 
   const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, outline: 'none', boxSizing: 'border-box', color: '#1e293b' };
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 5 };
+
+  if (ctxLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', flexDirection: 'column', gap: 16 }}>
+        <div style={{ width: 48, height: 48, border: '4px solid #e2e8f0', borderTop: '4px solid #3b82f6', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <p style={{ color: '#94a3b8', fontSize: 14 }}>Cargando información...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   if (!isPro) {
     return (
