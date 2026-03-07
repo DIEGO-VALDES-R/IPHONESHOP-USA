@@ -36,7 +36,6 @@ interface DatabaseContextType {
 
 const DatabaseContext = createContext<DatabaseContextType | undefined>(undefined);
 
-// ── ACEPTA overrideCompanyId para modo vista previa desde panel admin ──────────
 export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCompanyId?: string }> = ({ children, overrideCompanyId }) => {
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [branchId, setBranchId] = useState<string | null>(null);
@@ -101,25 +100,29 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
   };
 
   const loadAllData = async (cid: string) => {
-    console.log('🔵 Cargando datos para company:', cid);
     setIsLoading(true);
     await loadCompany(cid);
-    await Promise.all([
-      loadProducts(cid),
-      loadSales(cid),
-      loadSession(cid),
-      loadRepairs(cid),
-      loadCustomers(cid),
-    ]);
-    console.log('✅ Datos cargados');
+    await Promise.all([loadProducts(cid), loadSales(cid), loadSession(cid), loadRepairs(cid), loadCustomers(cid)]);
     setIsLoading(false);
   };
 
+  // Obtener o crear branch para una company
+  const resolvebranchId = async (cid: string): Promise<string | null> => {
+    const { data: branches } = await supabase.from('branches').select('id').eq('company_id', cid).limit(1);
+    if (branches && branches.length > 0) return branches[0].id;
+    // Si no hay branch, crear uno automáticamente
+    const { data: newBranch, error } = await supabase.from('branches').insert({
+      company_id: cid, name: 'Principal', is_active: true,
+    }).select('id').single();
+    if (error) { console.error('❌ No se pudo crear branch:', error.message); return null; }
+    return newBranch.id;
+  };
+
   useEffect(() => {
-    // Si hay overrideCompanyId (modo vista previa), cargar directo ese negocio
     if (overrideCompanyId) {
       setCompanyId(overrideCompanyId);
       setUserRole('ADMIN');
+      resolvebranchId(overrideCompanyId).then(bid => setBranchId(bid));
       loadAllData(overrideCompanyId);
       return;
     }
@@ -129,10 +132,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
       if (!user) { setIsLoading(false); return; }
 
       const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('company_id, branch_id, role')
-        .eq('id', user.id)
-        .maybeSingle();
+        .from('profiles').select('company_id, branch_id, role').eq('id', user.id).maybeSingle();
 
       if (error || !profile) {
         console.warn('⚠️ Sin perfil para este usuario:', user.email);
@@ -140,15 +140,19 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
         return;
       }
 
-      console.log('👤 Profile cargado:', profile);
       setUserRole(profile.role);
 
       if (profile.company_id) {
         setCompanyId(profile.company_id);
-        setBranchId(profile.branch_id);
+
+        // Resolver branchId: usar el del perfil o buscar/crear uno
+        let bid = profile.branch_id || null;
+        if (!bid) {
+          bid = await resolvebranchId(profile.company_id);
+        }
+        setBranchId(bid);
         await loadAllData(profile.company_id);
       } else {
-        console.warn('⚠️ Usuario sin company_id');
         setIsLoading(false);
       }
     };
@@ -160,9 +164,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
     setCompanyId(cid);
     setProducts([]); setSales([]); setRepairs([]); setCustomers([]);
     setSession(null); setCompany(null);
-    const { data: branches } = await supabase.from('branches').select('id')
-      .eq('company_id', cid).limit(1);
-    setBranchId(branches && branches.length > 0 ? branches[0].id : null);
+    const bid = await resolvebranchId(cid);
+    setBranchId(bid);
     await loadAllData(cid);
     toast.success('Empresa cambiada');
   };
@@ -195,8 +198,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
 
   const addRepair = async (data: Omit<RepairOrder, 'id'>) => {
     if (!companyId) return;
+    const resolvedBranchId = branchId || await resolvebranchId(companyId);
     const { error } = await supabase.from('repair_orders').insert({
-      ...data, company_id: companyId, branch_id: branchId, updated_at: new Date().toISOString()
+      ...data, company_id: companyId, branch_id: resolvedBranchId, updated_at: new Date().toISOString()
     });
     if (error) { toast.error(error.message); return; }
     await loadRepairs(companyId);
@@ -216,14 +220,16 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
     customerPhone?: string; items: any[]; total: number;
     subtotal: number; taxAmount: number; applyIva?: boolean;
   }): Promise<Sale> => {
-    if (!companyId || !branchId) throw new Error('No company/branch');
+    if (!companyId) throw new Error('No company');
+    const resolvedBranchId = branchId || await resolvebranchId(companyId);
+    if (!resolvedBranchId) throw new Error('No se pudo obtener la sucursal');
 
     const timestamp = Date.now().toString().slice(-6);
     const random = Math.floor(Math.random() * 100).toString().padStart(2, '0');
     const invoiceNumber = `POS-${timestamp}${random}`;
 
     const { data: invoice, error: invErr } = await supabase.from('invoices').insert({
-      company_id: companyId, branch_id: branchId, invoice_number: invoiceNumber,
+      company_id: companyId, branch_id: resolvedBranchId, invoice_number: invoiceNumber,
       customer_id: null,
       subtotal: Math.round(saleData.subtotal), tax_amount: Math.round(saleData.taxAmount),
       total_amount: saleData.total, status: 'PENDING_ELECTRONIC',
@@ -281,9 +287,15 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
   };
 
   const openSession = async (amount: number) => {
-    if (!companyId || !branchId) return;
+    if (!companyId) { toast.error('No hay empresa configurada'); return; }
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) { toast.error('No hay sesión de usuario'); return; }
+
+    // Resolver branchId si no está disponible
+    const resolvedBranchId = branchId || await resolvebranchId(companyId);
+    if (!resolvedBranchId) { toast.error('No se pudo obtener la sucursal'); return; }
+    if (!branchId) setBranchId(resolvedBranchId);
+
     const { error } = await supabase.from('cash_register_sessions').insert({
       company_id: companyId,
       register_id: '00000000-0000-0000-0000-000000000000',
@@ -300,7 +312,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
   const closeSession = async (endAmount: number) => {
     if (!session) return;
     const { error } = await supabase.from('cash_register_sessions').update({
-      end_cash: endAmount, end_time: new Date().toISOString(), status: 'CLOSED'
+      end_cash: endAmount, end_time: new Date().toISOString(), status: 'CLOSED',
+      difference: endAmount - ((session.start_cash || 0) + (session.total_sales_cash || 0)),
     }).eq('id', session.id);
     if (error) { toast.error(error.message); return; }
     if (companyId) await loadSession(companyId);
