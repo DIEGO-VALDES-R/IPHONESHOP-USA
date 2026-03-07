@@ -359,11 +359,13 @@ export const AdminPanel: React.FC<{ onExit: () => void; onPreview: (companyId: s
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from('companies').select('*, profiles(email)').order('created_at', { ascending: false });
+    const { data } = await supabase.from('companies').select('*').order('created_at', { ascending: false });
     // Cargar notificaciones no leídas
-    const { data: notifs } = await supabase.from('admin_notifications')
-      .select('*').eq('is_read', false).order('created_at', { ascending: false }).limit(20);
-    setNotifications(notifs || []);
+    try {
+      const { data: notifs } = await supabase.from('admin_notifications')
+        .select('*').eq('is_read', false).order('created_at', { ascending: false }).limit(20);
+      setNotifications(notifs || []);
+    } catch (_) {}
     setCompanies(data || []);
     setLoading(false);
   };
