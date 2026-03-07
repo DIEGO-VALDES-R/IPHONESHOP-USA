@@ -515,9 +515,24 @@ export const AdminPanel: React.FC<{ onExit: () => void; onPreview: (companyId: s
     PAST_DUE: { bg: '#ffedd5', color: '#ea580c', label: 'Vencido' },
   };
 
-  const filtered = companies
-    .filter(c => filterStatus === 'ALL' || c.subscription_status === filterStatus)
-    .filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()) || (c.nit || '').includes(search) || (c.email || '').toLowerCase().includes(search.toLowerCase()));
+  // Ordenar: principales primero, luego sus sucursales debajo
+  const buildGrouped = () => {
+    const principales = companies.filter(c => c.tipo !== 'sucursal' || !c.negocio_padre_id);
+    const result: any[] = [];
+    principales.forEach(p => {
+      const matchP = (filterStatus === 'ALL' || p.subscription_status === filterStatus) &&
+        (!search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.nit || '').includes(search) || (p.email || '').toLowerCase().includes(search.toLowerCase()));
+      const sucursales = companies.filter(c => c.negocio_padre_id === p.id);
+      const matchedSucursales = sucursales.filter(s =>
+        (filterStatus === 'ALL' || s.subscription_status === filterStatus) &&
+        (!search || s.name.toLowerCase().includes(search.toLowerCase()) || (s.nit || '').includes(search))
+      );
+      if (matchP) { result.push({ ...p, _indent: false }); matchedSucursales.forEach(s => result.push({ ...s, _indent: true })); }
+      else if (matchedSucursales.length > 0) { result.push({ ...p, _indent: false }); matchedSucursales.forEach(s => result.push({ ...s, _indent: true })); }
+    });
+    return result;
+  };
+  const filtered = buildGrouped();
 
   const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, outline: 'none', boxSizing: 'border-box', color: '#1e293b' };
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: 13, fontWeight: 600, color: '#64748b', marginBottom: 5 };
