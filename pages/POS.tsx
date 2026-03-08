@@ -2,7 +2,7 @@
 import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Smartphone, X, Printer, Barcode, Zap, Tag } from 'lucide-react';
 import { Product, ProductType, CartItem, PaymentMethod, Sale } from '../types';
 import { toast, Toaster } from 'react-hot-toast';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner';
@@ -12,6 +12,8 @@ const POS: React.FC = () => {
   const { formatMoney } = useCurrency();
   const { products, session, processSale, company } = useDatabase();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const location       = useLocation();
+  const navigate       = useNavigate();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -24,9 +26,9 @@ const POS: React.FC = () => {
   const [applyIva, setApplyIva] = useState(true);
 
   // ── DESCUENTO GLOBAL DEL CARRITO ──────────────────────────────────────────
-  const [globalDiscount, setGlobalDiscount] = useState<string>('');   // string para el input
+  const [globalDiscount, setGlobalDiscount] = useState<string>('');
   const globalDiscountNum = parseFloat(globalDiscount) || 0;
-  const clampedDiscount = Math.min(Math.max(globalDiscountNum, 0), 100); // 0–100%
+  const clampedDiscount = Math.min(Math.max(globalDiscountNum, 0), 100);
 
   // Datos cliente
   const [customerName, setCustomerName] = useState('');
@@ -38,6 +40,56 @@ const POS: React.FC = () => {
   const [payments, setPayments] = useState<{method: PaymentMethod, amount: number}[]>([]);
   const [currentPaymentAmount, setCurrentPaymentAmount] = useState('');
   const [currentPaymentMethod, setCurrentPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
+
+  // ── MODO ABONO ────────────────────────────────────────────────────────────
+  const [isPartialMode, setIsPartialMode]   = useState(false);   // toggle pago parcial
+  const [shoeRepairId, setShoeRepairId]     = useState<string>(''); // id orden zapatería
+  const [shoeRepairLabel, setShoeRepairLabel] = useState('');       // label informativo
+
+  // Leer parámetros de URL cuando viene de zapatería: /pos?shoe=ID&cliente=...&cedula=...&tel=...&total=...&abono=...&servicio=...
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const shoeId = params.get('shoe');
+    if (!shoeId) return;
+
+    setShoeRepairId(shoeId);
+    setCustomerName(params.get('cliente') || '');
+    setCustomerDoc(params.get('cedula') || '');
+    setCustomerPhone(params.get('tel') || '');
+    setShoeRepairLabel(`Orden ${params.get('ticket') || shoeId} — ${params.get('servicio') || 'Reparación'}`);
+
+    const total  = parseFloat(params.get('total')  || '0');
+    const abono  = parseFloat(params.get('abono')  || '0');
+    const saldo  = total - abono;
+
+    // Agregar como producto de servicio virtual al carrito
+    const virtualService: any = {
+      product: {
+        id: `shoe-${shoeId}`,
+        name: params.get('servicio') || 'Reparación de calzado',
+        price: total,
+        type: 'SERVICE',
+        sku: `ZAP-${shoeId.slice(0, 6)}`,
+        stock_quantity: 999,
+        tax_rate: 0,
+      },
+      quantity: 1,
+    };
+    setCart([virtualService]);
+    setApplyIva(false);
+
+    // Si ya hay abono, pre-registrar el abono pagado y activar modo parcial con saldo
+    if (abono > 0) {
+      setIsPartialMode(true);
+      setPayments([{ method: PaymentMethod.CASH, amount: abono }]);
+    }
+
+    // Abrir modal de pago automáticamente cuando sea posible
+    if (session?.status === 'OPEN') {
+      setTimeout(() => setIsPaymentModalOpen(true), 600);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   // Hook para detectar escaneos de códigos de barras en el POS
   const { isScanning } = useBarcodeScanner((barcode) => {
@@ -122,7 +174,7 @@ const POS: React.FC = () => {
   const addPayment = () => {
     const amount = parseFloat(currentPaymentAmount);
     if (!amount || amount <= 0) return;
-    if (amount > totals.remaining + 100) { toast.error('El monto excede el total restante'); return; }
+    if (!isPartialMode && amount > totals.remaining + 100) { toast.error('El monto excede el total restante'); return; }
     setPayments([...payments, { method: currentPaymentMethod, amount }]);
     setCurrentPaymentAmount('');
   };
@@ -130,20 +182,31 @@ const POS: React.FC = () => {
   const removePayment = (index: number) => { const p = [...payments]; p.splice(index, 1); setPayments(p); };
 
   const handleFinalizeSale = async () => {
-    if (Math.abs(totals.remaining) > 100) { toast.error('Debe cubrir el total de la venta'); return; }
+    const amountPaid = totals.totalPaid;
+
+    // En modo normal: exigir pago completo
+    if (!isPartialMode && Math.abs(totals.remaining) > 100) {
+      toast.error('Debe cubrir el total de la venta o activar modo Abono Parcial');
+      return;
+    }
+    // En modo parcial: exigir al menos un pago
+    if (isPartialMode && amountPaid <= 0) {
+      toast.error('Ingresa al menos un monto de abono');
+      return;
+    }
 
     const sale = await processSale({
-      customer: customerName || 'Consumidor Final',
-      customerDoc,
-      customerEmail,
-      customerPhone,
-      items: cart,
-      total: totals.total,
-      subtotal: totals.subtotal,
-      taxAmount: totals.tax,
+      customer:    customerName || 'Consumidor Final',
+      customerDoc, customerEmail, customerPhone,
+      items:       cart,
+      total:       totals.total,
+      subtotal:    totals.subtotal,
+      taxAmount:   totals.tax,
       applyIva,
       discountPercent: clampedDiscount,
-      discountAmount: totals.discountAmount,
+      discountAmount:  totals.discountAmount,
+      amountPaid:   amountPaid,
+      shoeRepairId: shoeRepairId || undefined,
     });
 
     setLastSale({ ...sale, _cartItems: cart, discountPercent: clampedDiscount, discountAmount: totals.discountAmount } as any);
@@ -151,7 +214,10 @@ const POS: React.FC = () => {
     setCart([]); setPayments([]);
     setGlobalDiscount('');
     setCustomerName(''); setCustomerDoc(''); setCustomerEmail(''); setCustomerPhone('');
+    setIsPartialMode(false); setShoeRepairId(''); setShoeRepairLabel('');
     setIsPaymentModalOpen(false);
+    // Limpiar params de URL
+    navigate('/pos', { replace: true });
   };
 
   if (session?.status !== 'OPEN') {
@@ -363,8 +429,21 @@ const POS: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-              <h3 className="font-bold text-xl text-slate-800">Procesar Pago</h3>
-              <button onClick={() => setIsPaymentModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full"><X size={24} /></button>
+              <div>
+                <h3 className="font-bold text-xl text-slate-800">Procesar Pago</h3>
+                {shoeRepairLabel && <p className="text-xs text-blue-600 font-semibold mt-0.5">🔧 {shoeRepairLabel}</p>}
+              </div>
+              <div className="flex items-center gap-3">
+                {/* Toggle Abono Parcial */}
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <span className="text-sm font-semibold text-slate-600">Abono parcial</span>
+                  <div onClick={() => setIsPartialMode(p => !p)}
+                    className={`relative w-11 h-6 rounded-full transition-colors cursor-pointer ${isPartialMode ? 'bg-amber-500' : 'bg-slate-200'}`}>
+                    <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${isPartialMode ? 'left-5' : 'left-0.5'}`} />
+                  </div>
+                </label>
+                <button onClick={() => setIsPaymentModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full"><X size={24} /></button>
+              </div>
             </div>
             <div className="flex-1 overflow-auto p-6">
               <div className="mb-6 grid grid-cols-2 gap-4">
@@ -424,9 +503,20 @@ const POS: React.FC = () => {
                       </div>
                     ))}
                     <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between font-bold text-sm">
-                      <span>Restante:</span>
-                      <span className={totals.remaining > 100 ? 'text-red-600' : 'text-green-600'}>{formatMoney(totals.remaining)}</span>
+                      <span>{isPartialMode ? 'Abonado:' : 'Restante:'}</span>
+                      <span className={isPartialMode
+                        ? 'text-amber-600'
+                        : totals.remaining > 100 ? 'text-red-600' : 'text-green-600'}>
+                        {isPartialMode
+                          ? `${formatMoney(totals.totalPaid)} de ${formatMoney(totals.total)}`
+                          : formatMoney(totals.remaining)}
+                      </span>
                     </div>
+                    {isPartialMode && totals.remaining > 0 && (
+                      <div className="mt-2 p-2 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-700 font-semibold">
+                        ⏳ Saldo pendiente: {formatMoney(totals.remaining)} → quedará en Cartera/CxC
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -457,9 +547,10 @@ const POS: React.FC = () => {
               <button onClick={() => setIsPaymentModalOpen(false)} className="px-6 py-3 rounded-lg border border-slate-300 font-bold text-slate-600 hover:bg-white">
                 Cancelar
               </button>
-              <button onClick={handleFinalizeSale} disabled={totals.remaining > 100}
+              <button onClick={handleFinalizeSale}
+                disabled={isPartialMode ? totals.totalPaid <= 0 : totals.remaining > 100}
                 className="px-6 py-3 rounded-lg bg-green-600 text-white font-bold hover:bg-green-700 disabled:bg-slate-300 flex items-center gap-2">
-                <Printer size={20} /> Facturar e Imprimir
+                <Printer size={20} /> {isPartialMode && totals.remaining > 100 ? 'Facturar con Abono' : 'Facturar e Imprimir'}
               </button>
             </div>
           </div>

@@ -238,6 +238,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
     customerPhone?: string; items: any[]; total: number;
     subtotal: number; taxAmount: number; applyIva?: boolean;
     discountPercent?: number; discountAmount?: number;
+    amountPaid?: number;          // nuevo: monto efectivamente pagado
+    shoeRepairId?: string;        // nuevo: id orden zapatería si aplica
   }): Promise<Sale> => {
     if (!companyId) throw new Error('No company');
     const resolvedBranchId = branchId || await resolvebranchId(companyId);
@@ -247,13 +249,23 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
     const random = Math.floor(Math.random() * 100).toString().padStart(2, '0');
     const invoiceNumber = `POS-${timestamp}${random}`;
 
+    // Calcular saldo
+    const amountPaid   = saleData.amountPaid ?? saleData.total;
+    const balanceDue   = Math.max(saleData.total - amountPaid, 0);
+    const paymentStatus = balanceDue === 0 ? 'PAID' : amountPaid > 0 ? 'PARTIAL' : 'PENDING';
+
     const { data: invoice, error: invErr } = await supabase.from('invoices').insert({
       company_id: companyId, branch_id: resolvedBranchId, invoice_number: invoiceNumber,
       customer_id: null,
       subtotal: Math.round(saleData.subtotal), tax_amount: Math.round(saleData.taxAmount),
       total_amount: saleData.total, status: 'PENDING_ELECTRONIC',
+      // Campos de abono
+      amount_paid:    amountPaid,
+      balance_due:    balanceDue,
+      payment_status: paymentStatus,
+      client_id:      saleData.customerDoc || null,
       payment_method: {
-        method: 'CASH', amount: saleData.total,
+        method: 'CASH', amount: amountPaid,
         customer_name: saleData.customer || null,
         customer_document: saleData.customerDoc || null,
         customer_email: saleData.customerEmail || null,
@@ -270,6 +282,33 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
       }))
     );
 
+    // Si viene de zapatería, registrar abono inicial y vincular factura
+    if (saleData.shoeRepairId) {
+      await supabase.from('shoe_repair_orders')
+        .update({ invoice_id: invoice.id, status: 'DELIVERED' })
+        .eq('id', saleData.shoeRepairId);
+      await supabase.from('shoe_repair_history').insert({
+        company_id: companyId,
+        repair_id: saleData.shoeRepairId,
+        event: 'INVOICED',
+        description: `Factura generada: ${invoiceNumber}. Pagado: $${amountPaid.toLocaleString('es-CO')}${balanceDue > 0 ? ` · Saldo pendiente: $${balanceDue.toLocaleString('es-CO')}` : ''}`,
+        user_name: 'POS',
+      });
+    }
+
+    // Registrar pago inicial en historial de pagos si hay monto pagado
+    if (amountPaid > 0) {
+      await supabase.from('invoice_payments').insert({
+        company_id: companyId,
+        invoice_id: invoice.id,
+        source_type: saleData.shoeRepairId ? 'SHOE_REPAIR' : 'POS',
+        amount: amountPaid,
+        payment_method: 'cash',
+        reference: '',
+        user_name: 'POS',
+      }).select();
+    }
+
     for (const i of saleData.items.filter((i: any) => i.product.type !== 'SERVICE')) {
       const currentStock = i.product.stock_quantity ?? 0;
       const newStock = Math.max(0, currentStock - i.quantity);
@@ -284,12 +323,12 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
 
     if (session?.id) {
       await supabase.from('cash_register_sessions')
-        .update({ total_sales_cash: (session.total_sales_cash || 0) + saleData.total })
+        .update({ total_sales_cash: (session.total_sales_cash || 0) + amountPaid })
         .eq('id', session.id);
     }
 
     await Promise.all([loadProducts(companyId), loadSales(companyId), loadSession(companyId)]);
-    toast.success('Venta guardada');
+    toast.success(balanceDue > 0 ? `Factura con saldo pendiente: $${balanceDue.toLocaleString('es-CO')}` : 'Venta guardada');
     return invoice as any;
   };
 
