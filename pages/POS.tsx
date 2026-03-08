@@ -206,6 +206,15 @@ const POS: React.FC = () => {
           </div>
         </div>
         <div className="flex-1 overflow-auto p-4">
+          {filteredProducts.length === 0 && searchTerm && (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <div className="text-slate-300 mb-4">
+                <ShoppingCart size={48} />
+              </div>
+              <p className="text-slate-500 font-medium">No hay productos disponibles</p>
+              <p className="text-slate-400 text-sm">Intenta con otro término de búsqueda o verifica el stock</p>
+            </div>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filteredProducts.map(product => (
               <button
