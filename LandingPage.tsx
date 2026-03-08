@@ -18,8 +18,9 @@ export const LandingPage: React.FC<{ onLogin: () => void; onRegister: () => void
 
   const plans = [
     { id: 'TRIAL', name: 'Prueba Gratis', price: 'Gratis', period: '7 días', color: '#10b981', badge: '🎁 Sin tarjeta', features: ['Acceso completo 7 días', 'POS Completo', 'Inventario', 'Control de Caja', 'Servicio Técnico', 'Sin compromiso'], cta: 'Probar Gratis' },
-    { id: 'BASIC', name: 'Basic', price: '$65.000', period: '/mes', color: '#64748b', features: ['1 Negocio', 'POS Completo', 'Inventario Ilimitado', 'Control de Caja', 'Servicio Técnico', 'Cartera / CxC', 'Soporte por WhatsApp'], cta: 'Comenzar' },
-    { id: 'PRO', name: 'Pro', price: '$120.000', period: '/mes', color: '#3b82f6', badge: '⭐ Más popular', features: ['Todo lo del Basic', 'Hasta 3 sucursales adicionales', 'Panel de sucursales', 'Cada sucursal con su POS', 'Soporte Prioritario', 'Asesoría personalizada'], cta: 'Comenzar Ahora', popular: true },
+    { id: 'BASIC', name: 'Basic', price: '$65.000', period: '/mes', color: '#64748b', features: ['1 Negocio', 'POS Completo', 'Inventario Ilimitado', 'Control de Caja', 'Servicio Técnico', 'Cartera / CxC', '1 sucursal · 1 usuario admin', 'Soporte por WhatsApp'], cta: 'Comenzar' },
+    { id: 'PRO', name: 'Pro', price: '$120.000', period: '/mes', color: '#3b82f6', badge: '⭐ Más popular', features: ['Todo lo del Basic', 'Hasta 3 sucursales', 'Hasta 5 usuarios', 'Roles y permisos', 'PIN de acceso rápido', 'Dashboard multi-sucursal', 'Soporte Prioritario'], cta: 'Comenzar Ahora', popular: true },
+    { id: 'ENTERPRISE', name: 'Enterprise', price: '$249.900', period: '/mes', color: '#8b5cf6', badge: '🏢 Para grandes negocios', features: ['Todo lo del Pro', 'Sucursales ilimitadas', 'Usuarios ilimitados', 'Facturación electrónica DIAN', 'API + Webhooks', 'Gerente de cuenta dedicado', 'SLA 99.9% uptime', 'Soporte Dedicado'], cta: 'Contactar Ventas', enterprise: true },
   ];
 
   const features = [
@@ -85,12 +86,15 @@ export const LandingPage: React.FC<{ onLogin: () => void; onRegister: () => void
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 20 }}>
           {plans.map(plan => (
             <div key={plan.id} style={{
-              background: (plan as any).popular ? 'linear-gradient(135deg,rgba(59,130,246,0.1),rgba(99,102,241,0.1))' : 'rgba(255,255,255,0.03)',
-              border: (plan as any).popular ? '2px solid rgba(59,130,246,0.5)' : '1px solid rgba(255,255,255,0.07)',
+              background: (plan as any).enterprise ? 'linear-gradient(135deg,rgba(139,92,246,0.15),rgba(109,40,217,0.1))' : (plan as any).popular ? 'linear-gradient(135deg,rgba(59,130,246,0.1),rgba(99,102,241,0.1))' : 'rgba(255,255,255,0.03)',
+              border: (plan as any).enterprise ? '2px solid rgba(139,92,246,0.5)' : (plan as any).popular ? '2px solid rgba(59,130,246,0.5)' : '1px solid rgba(255,255,255,0.07)',
               borderRadius: 20, padding: 32, position: 'relative', display: 'flex', flexDirection: 'column'
             }}>
               {(plan as any).popular && (
                 <div style={{ position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg,#3b82f6,#6366f1)', color: '#fff', padding: '4px 16px', borderRadius: 100, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>MÁS POPULAR</div>
+              )}
+              {(plan as any).enterprise && (
+                <div style={{ position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg,#8b5cf6,#6d28d9)', color: '#fff', padding: '4px 16px', borderRadius: 100, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>🏢 ENTERPRISE</div>
               )}
               <div style={{ marginBottom: 24 }}>
                 <h3 style={{ fontWeight: 700, fontSize: 18, marginBottom: 12, color: plan.color }}>{plan.name}</h3>
@@ -102,18 +106,72 @@ export const LandingPage: React.FC<{ onLogin: () => void; onRegister: () => void
               <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 32px', flex: 1 }}>
                 {plan.features.map((feat, i) => (
                   <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, fontSize: 14, color: '#cbd5e1' }}>
-                    <span style={{ color: '#22c55e', fontWeight: 700 }}>✓</span> {feat}
+                    <span style={{ color: (plan as any).enterprise ? '#a78bfa' : '#22c55e', fontWeight: 700 }}>✓</span> {feat}
                   </li>
                 ))}
               </ul>
-              <button onClick={onRegister} style={{
-                background: (plan as any).popular ? 'linear-gradient(135deg,#3b82f6,#6366f1)' : 'rgba(255,255,255,0.08)',
-                border: 'none', color: '#fff', padding: '12px 24px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, width: '100%'
-              }}>{plan.cta}</button>
+              <button
+                onClick={() => (plan as any).enterprise
+                  ? window.open('https://wa.me/573001234567?text=Hola%2C+quiero+información+sobre+el+plan+Enterprise+de+POSmaster', '_blank')
+                  : onRegister()}
+                style={{
+                  background: (plan as any).enterprise ? 'linear-gradient(135deg,#8b5cf6,#6d28d9)' : (plan as any).popular ? 'linear-gradient(135deg,#3b82f6,#6366f1)' : 'rgba(255,255,255,0.08)',
+                  border: 'none', color: '#fff', padding: '12px 24px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, width: '100%'
+                }}>{plan.cta}</button>
             </div>
           ))}
         </div>
       </section>
+
+      {/* COMPARATIVA DE PLANES */}
+      <section style={{ padding: '60px 5%', maxWidth: 1100, margin: '0 auto' }}>
+        <h2 style={{ textAlign: 'center', fontSize: 'clamp(1.5rem,3.5vw,2.2rem)', fontWeight: 800, marginBottom: 8, letterSpacing: '-1px' }}>Comparativa de planes</h2>
+        <p style={{ textAlign: 'center', color: '#64748b', marginBottom: 40, fontSize: 15 }}>Todo lo que incluye cada plan</p>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', background: 'rgba(255,255,255,0.03)', borderRadius: 16, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <thead>
+              <tr>
+                <th style={{ padding: '16px 20px', textAlign: 'left', color: '#94a3b8', fontSize: 13, fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Función</th>
+                {[
+                  { name: 'Basic', color: '#64748b' },
+                  { name: 'Pro', color: '#3b82f6' },
+                  { name: 'Enterprise', color: '#8b5cf6' },
+                ].map(p => (
+                  <th key={p.name} style={{ padding: '16px 20px', textAlign: 'center', color: p.color, fontSize: 15, fontWeight: 800, borderBottom: '1px solid rgba(255,255,255,0.08)', minWidth: 120 }}>{p.name}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { feature: 'POS y ventas', basic: '✅', pro: '✅', enterprise: '✅' },
+                { feature: 'Inventario ilimitado', basic: '✅', pro: '✅', enterprise: '✅' },
+                { feature: 'Control de caja', basic: '✅', pro: '✅', enterprise: '✅' },
+                { feature: 'Servicio técnico', basic: '✅', pro: '✅', enterprise: '✅' },
+                { feature: 'Cartera / CxC', basic: '✅', pro: '✅', enterprise: '✅' },
+                { feature: 'Sucursales', basic: '1', pro: 'Hasta 3', enterprise: 'Ilimitadas' },
+                { feature: 'Usuarios / colaboradores', basic: '1 admin', pro: 'Hasta 5', enterprise: 'Ilimitados' },
+                { feature: 'Roles y permisos', basic: '❌', pro: '✅', enterprise: '✅' },
+                { feature: 'PIN de acceso rápido', basic: '❌', pro: '✅', enterprise: '✅' },
+                { feature: 'Dashboard multi-sucursal', basic: '❌', pro: '✅', enterprise: '✅' },
+                { feature: 'Facturación electrónica DIAN', basic: '❌', pro: '❌', enterprise: '✅' },
+                { feature: 'API + Webhooks', basic: '❌', pro: '❌', enterprise: '✅' },
+                { feature: 'Gerente de cuenta dedicado', basic: '❌', pro: '❌', enterprise: '✅' },
+                { feature: 'Métodos de pago del negocio', basic: '✅', pro: '✅', enterprise: '✅' },
+                { feature: 'SLA uptime', basic: '99%', pro: '99.5%', enterprise: '99.9%' },
+                { feature: 'Soporte', basic: 'WhatsApp', pro: 'Prioritario', enterprise: 'Dedicado' },
+              ].map((row, i) => (
+                <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
+                  <td style={{ padding: '13px 20px', fontSize: 14, color: '#cbd5e1', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>{row.feature}</td>
+                  <td style={{ padding: '13px 20px', textAlign: 'center', fontSize: 14, color: '#94a3b8', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>{row.basic}</td>
+                  <td style={{ padding: '13px 20px', textAlign: 'center', fontSize: 14, color: '#60a5fa', borderBottom: '1px solid rgba(255,255,255,0.05)', fontWeight: row.pro === '✅' ? 700 : 400 }}>{row.pro}</td>
+                  <td style={{ padding: '13px 20px', textAlign: 'center', fontSize: 14, color: '#a78bfa', borderBottom: '1px solid rgba(255,255,255,0.05)', fontWeight: row.enterprise === '✅' ? 700 : 400 }}>{row.enterprise}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
 
       {/* FEATURES */}
       <section style={{ padding: '80px 5%', maxWidth: 1100, margin: '0 auto' }}>
@@ -271,9 +329,9 @@ export const RegisterPage: React.FC<{ onBack: () => void; onSuccess: () => void 
             <div>
               <label style={labelStyle}>Plan</label>
               <select value={form.plan} onChange={f('plan')} style={{ ...inputStyle, cursor: 'pointer' }}>
-                <option value="BASIC">Básico — Gratis</option>
-                <option value="PRO">Profesional — $79.900/mes</option>
-                <option value="ENTERPRISE">Empresarial — $249.900/mes</option>
+                <option value="BASIC">Basic — $65.000/mes</option>
+                <option value="PRO">Pro — $120.000/mes ⭐</option>
+                <option value="ENTERPRISE">Enterprise — $249.900/mes 🏢</option>
               </select>
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
@@ -977,7 +1035,7 @@ export const AdminPanel: React.FC<{ onExit: () => void; onPreview: (companyId: s
               </div>
               <div><label style={labelStyle}>Plan</label>
                 <select value={newCompany.plan} onChange={f('plan')} style={{ ...inputStyle, cursor: 'pointer' }}>
-                  <option value="TRIAL">Prueba (7 días)</option><option value="BASIC">Basic — $65.000/mes</option><option value="PRO">Pro — $120.000/mes</option>
+                  <option value="TRIAL">Prueba (7 días)</option><option value="BASIC">Basic — $65.000/mes</option><option value="PRO">Pro — $120.000/mes</option><option value="ENTERPRISE">Enterprise — $249.900/mes 🏢</option>
                 </select>
               </div>
               <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 14 }}>
@@ -1016,7 +1074,10 @@ export const AdminPanel: React.FC<{ onExit: () => void; onPreview: (companyId: s
               </div>
               <div><label style={labelStyle}>Plan</label>
                 <select value={editForm.plan} onChange={fe('plan')} style={{ ...inputStyle, cursor: 'pointer' }}>
-                  <option value="TRIAL">Prueba (7 días)</option><option value="BASIC">Basic — $65.000/mes</option><option value="PRO">Pro — $120.000/mes</option>
+                  <option value="TRIAL">Prueba (7 días)</option>
+                  <option value="BASIC">Basic — $65.000/mes</option>
+                  <option value="PRO">Pro — $120.000/mes</option>
+                  <option value="ENTERPRISE">Enterprise — $249.900/mes 🏢</option>
                 </select>
               </div>
               <div><label style={labelStyle}>Estado</label>
