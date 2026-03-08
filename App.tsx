@@ -15,6 +15,7 @@ import Branches from './pages/Branches';
 import Team from './pages/Team';
 import Tables from './pages/Tables';
 import KitchenDisplay from './pages/KitchenDisplay';
+import BeautySalon from './pages/BeautySalon';
 import { LandingPage, RegisterPage, AdminPanel } from './LandingPage';
 import { ContractSign } from './ContractSign';
 import AcceptInvitation from './AcceptInvitation';
@@ -312,6 +313,7 @@ const AppRoutes: React.FC = () => (
     <Route path="/team"         element={<Team />} />
     <Route path="/tables"       element={<Tables />} />
     <Route path="/kitchen"      element={<KitchenDisplay />} />
+    <Route path="/salon"        element={<BeautySalon />} />
   </Routes>
 );
 

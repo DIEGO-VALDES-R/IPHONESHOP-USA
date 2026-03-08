@@ -90,9 +90,35 @@ const Settings: React.FC = () => {
   const [fontColor, setFontColor] = useState(
     (safeCompany.config as any)?.font_color || '#ffffff'
   );
-  const [businessType, setBusinessType] = useState(
-    (safeCompany.config as any)?.business_type || 'general'
+  // businessTypes es ahora un array — BASIC: 1, PRO: hasta 3, ENTERPRISE: ilimitado
+  const maxBusinessTypes = plan === 'ENTERPRISE' ? 99 : plan === 'PRO' ? 3 : 1;
+  const parseBusinessTypes = (cfg: any): string[] => {
+    if (Array.isArray(cfg?.business_types)) return cfg.business_types;
+    if (cfg?.business_type) return [cfg.business_type]; // migración de dato antiguo
+    return ['general'];
+  };
+  const [businessTypes, setBusinessTypes] = useState<string[]>(
+    parseBusinessTypes((safeCompany.config as any))
   );
+  const toggleBusinessType = (id: string) => {
+    setBusinessTypes(prev => {
+      if (prev.includes(id)) {
+        // No dejar vacío
+        if (prev.length === 1) return prev;
+        return prev.filter(t => t !== id);
+      }
+      if (prev.length >= maxBusinessTypes) {
+        toast.error(
+          plan === 'BASIC'
+            ? 'El plan BASIC solo permite 1 tipo de negocio. Actualiza a PRO para seleccionar hasta 3.'
+            : `El plan PRO permite hasta 3 tipos. Actualiza a ENTERPRISE para tener todos.`
+        );
+        return prev;
+      }
+      return [...prev, id];
+    });
+  };
+
   const [savingBranding, setSavingBranding] = useState(false);
 
   // Sincronizar estados de branding cuando el contexto actualiza company (ej: tras guardar)
@@ -102,7 +128,7 @@ const Settings: React.FC = () => {
     setPrimaryColor(cfg.primary_color || '#3b82f6');
     setSecondaryColor(cfg.secondary_color || '#6366f1');
     setFontColor(cfg.font_color || '#ffffff');
-    setBusinessType(cfg.business_type || 'general');
+    setBusinessTypes(parseBusinessTypes(cfg));
   }, [company]);
   const [paymentProviders, setPaymentProviders] = useState<Record<string, any>>({
     cash:      { enabled: true,  label: 'Efectivo',             icon: '💵' },
@@ -184,7 +210,8 @@ const Settings: React.FC = () => {
         primary_color: primaryColor,
         secondary_color: secondaryColor,
         font_color: fontColor,
-        business_type: businessType,
+        business_type: businessTypes[0] || 'general',   // compatibilidad legacy
+        business_types: businessTypes,
       };
       const { error } = await supabase.from('companies')
         .update({ config: newConfig })
@@ -357,20 +384,58 @@ const Settings: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-white font-bold text-base">{formData.name || 'Mi Negocio'}</p>
-                    <p className="text-white/70 text-xs">{BUSINESS_TYPES.find(b => b.id === businessType)?.label || 'Tienda'}</p>
+                    <p className="text-white/70 text-xs">
+                      {businessTypes.map(id => BUSINESS_TYPES.find(b => b.id === id)?.label).filter(Boolean).join(' · ') || 'Tienda'}
+                    </p>
                   </div>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-3">Tipo de negocio</label>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-sm font-semibold text-slate-700">Tipo de negocio</label>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    plan === 'ENTERPRISE' ? 'bg-purple-100 text-purple-700' :
+                    plan === 'PRO'        ? 'bg-blue-100 text-blue-700' :
+                                           'bg-slate-100 text-slate-500'
+                  }`}>
+                    {plan === 'ENTERPRISE' ? '✨ Todos disponibles' :
+                     plan === 'PRO'        ? `${businessTypes.length}/3 seleccionados` :
+                                            `${businessTypes.length}/1 seleccionado`}
+                  </span>
+                </div>
+                {plan === 'BASIC' && (
+                  <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                    ⚠️ Plan BASIC: solo puedes tener <strong>1 tipo de negocio</strong>. Actualiza a <strong>PRO</strong> para hasta 3, o <strong>ENTERPRISE</strong> para todos.
+                  </p>
+                )}
+                {plan === 'PRO' && (
+                  <p className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-3">
+                    💡 Plan PRO: puedes seleccionar hasta <strong>3 tipos</strong>. Actualiza a <strong>ENTERPRISE</strong> para todos.
+                  </p>
+                )}
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {BUSINESS_TYPES.map(bt => (
-                    <button key={bt.id} type="button" onClick={() => setBusinessType(bt.id)}
-                      className={`p-3 rounded-lg border-2 text-sm font-medium text-left transition-all ${businessType === bt.id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 hover:border-slate-300 text-slate-600'}`}>
-                      {bt.label}
-                    </button>
-                  ))}
+                  {BUSINESS_TYPES.map(bt => {
+                    const isSelected = businessTypes.includes(bt.id);
+                    const isLocked   = !isSelected && businessTypes.length >= maxBusinessTypes;
+                    return (
+                      <button key={bt.id} type="button" onClick={() => toggleBusinessType(bt.id)}
+                        disabled={isLocked}
+                        className={`p-3 rounded-lg border-2 text-sm font-medium text-left transition-all relative ${
+                          isSelected  ? 'border-blue-500 bg-blue-50 text-blue-700' :
+                          isLocked    ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed' :
+                                        'border-slate-200 hover:border-slate-300 text-slate-600'
+                        }`}>
+                        {bt.label}
+                        {isSelected && (
+                          <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-white text-[10px]">✓</span>
+                        )}
+                        {isLocked && (
+                          <span className="absolute top-1.5 right-1.5 text-[10px]">🔒</span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

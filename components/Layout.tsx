@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, Package, Wrench,
   Settings, LogOut, Menu, Building2, User,
-  Landmark, FileText, Globe, Receipt, ShieldCheck, Users, Utensils, ChefHat
+  Landmark, FileText, Globe, Receipt, ShieldCheck, Users, Utensils, ChefHat, Scissors
 } from 'lucide-react';
 import { useCurrency, CurrencyCode } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
@@ -24,9 +24,13 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
   const isEnterprise = plan === 'ENTERPRISE';
   const isAdminOrMaster = userRole === 'MASTER' || userRole === 'ADMIN';
 
-  // Tipo de negocio configurado en Ajustes > Marca (se guarda en config jsonb)
-  const businessType: string = (company?.config as any)?.business_type || 'general';
-  const isRestaurant = businessType === 'restaurante';
+  // Tipos de negocio activos (guardados como array en config.business_types)
+  const cfg = (company?.config as any) || {};
+  const businessTypes: string[] = Array.isArray(cfg.business_types)
+    ? cfg.business_types
+    : cfg.business_type ? [cfg.business_type] : ['general'];
+  const isRestaurant = businessTypes.includes('restaurante');
+  const isSalon      = businessTypes.includes('salon');
 
   const navItems = [
     { label: 'Dashboard',          path: '/',             icon: LayoutDashboard, show: true },
@@ -38,6 +42,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
     { label: 'Cartera / CxC',      path: '/receivables',  icon: FileText,        show: hasPermission('can_view_reports') || isAdminOrMaster },
     { label: 'Mesas / Restaurante', path: '/tables',      icon: Utensils,        show: isRestaurant && isAdminOrMaster },
     { label: 'Display de Cocina',  path: '/kitchen',      icon: ChefHat,         show: isRestaurant && isAdminOrMaster },
+    { label: 'Salón de Belleza',   path: '/salon',        icon: Scissors,        show: isSalon && isAdminOrMaster },
     { label: 'Sucursales',         path: '/branches',     icon: Building2,       show: isPro && isAdminOrMaster },
     { label: 'Equipo',             path: '/team',         icon: Users,           show: isPro && (hasPermission('can_manage_team') || isAdminOrMaster) },
     { label: 'Configuración',      path: '/settings',     icon: Settings,        show: isAdminOrMaster },
