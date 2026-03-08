@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { DatabaseProvider } from './contexts/DatabaseContext';
@@ -18,10 +18,54 @@ import { ContractSign } from './ContractSign';
 import AcceptInvitation from './AcceptInvitation';
 import { Toaster } from 'react-hot-toast';
 
-const SUPER_ADMIN_EMAIL = 'diegofernando@office365tl.onmicrosoft.com';
-const WHATSAPP_NUMBER = '573204884943';
-const BOLD_PAYMENT_URL = 'https://checkout.bold.co/payment/LNK_U58X7N71NX';
-const CONTACT_EMAIL = 'diegoferrangel@gmail.com';
+// ── CORRECCIÓN AUTH-04 / FRO-01 ───────────────────────────────────────────────
+// Las constantes sensibles se mueven a variables de entorno .env
+// Crear archivo .env en la raíz del proyecto con estas variables:
+//   VITE_WHATSAPP_NUMBER=573204884943
+//   VITE_BOLD_PAYMENT_URL=https://checkout.bold.co/payment/LNK_U58X7N71NX
+//   VITE_CONTACT_EMAIL=diegoferrangel@gmail.com
+// El super admin ya NO está hardcodeado — se verifica contra la BD
+const WHATSAPP_NUMBER    = import.meta.env.VITE_WHATSAPP_NUMBER    || '573204884943';
+const BOLD_PAYMENT_URL   = import.meta.env.VITE_BOLD_PAYMENT_URL   || 'https://checkout.bold.co/payment/LNK_U58X7N71NX';
+const CONTACT_EMAIL      = import.meta.env.VITE_CONTACT_EMAIL      || 'diegoferrangel@gmail.com';
+
+// ── CORRECCIÓN AUTH-02 — Rate Limiting PIN ────────────────────────────────────
+// Máximo 5 intentos de PIN por sesión, bloqueo de 15 minutos
+const PIN_MAX_ATTEMPTS  = 5;
+const PIN_LOCKOUT_MS    = 15 * 60 * 1000; // 15 minutos
+
+const usePinRateLimit = () => {
+  const attemptsRef = useRef<number>(0);
+  const lockedUntilRef = useRef<number | null>(null);
+
+  const checkLocked = (): { locked: boolean; remainingMs: number } => {
+    if (lockedUntilRef.current && Date.now() < lockedUntilRef.current) {
+      return { locked: true, remainingMs: lockedUntilRef.current - Date.now() };
+    }
+    if (lockedUntilRef.current && Date.now() >= lockedUntilRef.current) {
+      // Lockout expiró — resetear
+      attemptsRef.current = 0;
+      lockedUntilRef.current = null;
+    }
+    return { locked: false, remainingMs: 0 };
+  };
+
+  const registerFailedAttempt = () => {
+    attemptsRef.current += 1;
+    if (attemptsRef.current >= PIN_MAX_ATTEMPTS) {
+      lockedUntilRef.current = Date.now() + PIN_LOCKOUT_MS;
+    }
+  };
+
+  const registerSuccess = () => {
+    attemptsRef.current = 0;
+    lockedUntilRef.current = null;
+  };
+
+  const remainingAttempts = () => PIN_MAX_ATTEMPTS - attemptsRef.current;
+
+  return { checkLocked, registerFailedAttempt, registerSuccess, remainingAttempts };
+};
 
 // ── PANTALLAS PENDING / PAST_DUE ──────────────────────────────────────────────
 const PendingScreen: React.FC<{ email: string; onRetry: () => void }> = ({ email, onRetry }) => {
@@ -71,15 +115,32 @@ const PastDueScreen: React.FC<{ email: string; onRetry: () => void }> = ({ email
   );
 };
 
-// ── LOGIN CON PIN RÁPIDO ──────────────────────────────────────────────────────
+// ── LOGIN ─────────────────────────────────────────────────────────────────────
 const Login: React.FC<{ onShowLanding: () => void; onShowRegister: () => void }> = ({ onShowLanding, onShowRegister }) => {
-  const [mode, setMode] = useState<'normal' | 'pin'>('normal');
+  const [mode, setMode] = useState<'normal' | 'pin' | 'pin-found'>('normal');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [pin, setPin] = useState('');
   const [pinDigits, setPinDigits] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // ── CORRECCIÓN AUTH-02 — Rate limiting ──
+  const { checkLocked, registerFailedAttempt, registerSuccess, remainingAttempts } = usePinRateLimit();
+  const [lockMsg, setLockMsg] = useState('');
+
+  // Actualiza el mensaje de bloqueo cada segundo si está bloqueado
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const { locked, remainingMs } = checkLocked();
+      if (locked) {
+        const mins = Math.ceil(remainingMs / 60000);
+        setLockMsg(`Demasiados intentos. Espera ${mins} min.`);
+      } else {
+        setLockMsg('');
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true); setError('');
@@ -89,11 +150,19 @@ const Login: React.FC<{ onShowLanding: () => void; onShowRegister: () => void }>
   };
 
   const handlePinLogin = async () => {
+    // ── Verificar rate limit antes de consultar ──
+    const { locked, remainingMs } = checkLocked();
+    if (locked) {
+      const mins = Math.ceil(remainingMs / 60000);
+      setError(`Demasiados intentos fallidos. Espera ${mins} minuto(s).`);
+      return;
+    }
+
     const fullPin = pinDigits.join('');
     if (fullPin.length !== 4) { setError('Ingresa los 4 dígitos'); return; }
     setLoading(true); setError('');
+
     try {
-      // Buscar profile con ese PIN
       const { data: profiles, error: pErr } = await supabase
         .from('profiles')
         .select('email, id')
@@ -102,15 +171,23 @@ const Login: React.FC<{ onShowLanding: () => void; onShowRegister: () => void }>
         .limit(5);
 
       if (pErr || !profiles || profiles.length === 0) {
-        setError('PIN incorrecto o usuario no encontrado'); setLoading(false); return;
-      }
-      if (profiles.length > 1) {
-        setError('PIN duplicado — usa login normal'); setLoading(false); return;
+        registerFailedAttempt(); // ← Registrar intento fallido
+        const left = remainingAttempts() - 1;
+        setError(left > 0
+          ? `PIN incorrecto. ${left} intento(s) restantes.`
+          : 'Cuenta bloqueada por 15 minutos.'
+        );
+        setLoading(false);
+        return;
       }
 
-      // Necesitamos la contraseña para hacer signIn — usamos un workaround:
-      // El PIN solo funciona si el admin configuró también la contraseña
-      // Mostramos el email encontrado y pedimos solo contraseña
+      if (profiles.length > 1) {
+        setError('PIN duplicado — usa login normal');
+        setLoading(false);
+        return;
+      }
+
+      registerSuccess(); // ← PIN válido, resetear contador
       setEmail(profiles[0].email || '');
       setMode('pin-found');
     } catch (err: any) {
@@ -137,7 +214,6 @@ const Login: React.FC<{ onShowLanding: () => void; onShowRegister: () => void }>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9', marginBottom: 6 }}>Bienvenido a POSmaster</h1>
           </div>
 
-          {/* Selector de modo */}
           <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: 4, marginBottom: 24 }}>
             <button onClick={() => { setMode('normal'); setError(''); }} style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: mode === 'normal' ? 'rgba(59,130,246,0.3)' : 'transparent', color: mode === 'normal' ? '#93c5fd' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               📧 Email / Contraseña
@@ -177,17 +253,24 @@ const Login: React.FC<{ onShowLanding: () => void; onShowRegister: () => void }>
                     value={pinDigits[i]}
                     onChange={e => handleDigit(i, e.target.value)}
                     onKeyDown={e => { if (e.key === 'Backspace' && !pinDigits[i] && i > 0) document.getElementById(`pind-${i-1}`)?.focus(); }}
+                    disabled={!!checkLocked().locked}
                     style={{ width: 56, height: 64, textAlign: 'center', fontSize: 28, fontWeight: 800, background: 'rgba(255,255,255,0.06)', border: `2px solid ${pinDigits[i] ? '#10b981' : 'rgba(255,255,255,0.12)'}`, borderRadius: 12, color: '#f1f5f9', outline: 'none' }} />
                 ))}
               </div>
-              {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', fontSize: 13, padding: '10px 14px', borderRadius: 8, marginBottom: 12, textAlign: 'center' }}>{error}</div>}
-              <button onClick={handlePinLogin} disabled={loading || pinDigits.join('').length < 4}
-                style={{ width: '100%', background: 'linear-gradient(135deg,#10b981,#059669)', border: 'none', color: '#fff', padding: '12px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, opacity: (loading || pinDigits.join('').length < 4) ? 0.5 : 1 }}>
+
+              {/* Mensaje de bloqueo */}
+              {lockMsg && (
+                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', fontSize: 13, padding: '10px 14px', borderRadius: 8, marginBottom: 12, textAlign: 'center' }}>
+                  🔒 {lockMsg}
+                </div>
+              )}
+
+              {error && !lockMsg && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', fontSize: 13, padding: '10px 14px', borderRadius: 8, marginBottom: 12, textAlign: 'center' }}>{error}</div>}
+
+              <button onClick={handlePinLogin} disabled={loading || pinDigits.join('').length < 4 || !!checkLocked().locked}
+                style={{ width: '100%', background: 'linear-gradient(135deg,#10b981,#059669)', border: 'none', color: '#fff', padding: '12px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, opacity: (loading || pinDigits.join('').length < 4 || !!checkLocked().locked) ? 0.5 : 1 }}>
                 {loading ? 'Buscando...' : '→ Entrar con PIN'}
               </button>
-              <p style={{ color: '#475569', fontSize: 12, textAlign: 'center', marginTop: 12 }}>
-                ⚠️ El PIN busca tu cuenta — luego se pedirá la contraseña si es necesario
-              </p>
             </div>
           )}
 
@@ -247,11 +330,10 @@ const App: React.FC = () => {
   const [userEmail, setUserEmail] = useState('');
   const [previewCompanyId, setPreviewCompanyId] = useState<string | null>(null);
 
-  // Detectar tokens especiales en la URL
-  const contractTokenMatch = window.location.hash.match(/^#\/contrato\/([a-f0-9]{64})$/);
-  const contractToken = contractTokenMatch ? contractTokenMatch[1] : null;
+  const contractTokenMatch  = window.location.hash.match(/^#\/contrato\/([a-f0-9]{64})$/);
+  const contractToken       = contractTokenMatch ? contractTokenMatch[1] : null;
   const invitationTokenMatch = window.location.hash.match(/^#\/invitacion\/([a-f0-9]{32})$/);
-  const invitationToken = invitationTokenMatch ? invitationTokenMatch[1] : null;
+  const invitationToken     = invitationTokenMatch ? invitationTokenMatch[1] : null;
 
   const retryCheck = async () => {
     const { data: { session: s } } = await supabase.auth.getSession();
@@ -273,13 +355,34 @@ const App: React.FC = () => {
     const handleSession = async (session: any) => {
       if (!session) { setView('landing'); setChecking(false); return; }
       const email = session.user.email || '';
-      setUserEmail(email); setSession(session);
-      if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) { setView('admin'); setChecking(false); return; }
+      setUserEmail(email);
+      setSession(session);
+
       try {
-        const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', session.user.id).maybeSingle();
+        // ── CORRECCIÓN AUTH-04 — Super admin verificado en BD, no hardcodeado ──
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('company_id, is_super_admin')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        // Verificar is_super_admin desde la base de datos
+        if (profile?.is_super_admin === true) {
+          setView('admin');
+          setChecking(false);
+          return;
+        }
+
         if (!profile?.company_id) { setView('pending'); setChecking(false); return; }
-        const { data: company } = await supabase.from('companies').select('subscription_status, subscription_end_date').eq('id', profile.company_id).maybeSingle();
+
+        const { data: company } = await supabase
+          .from('companies')
+          .select('subscription_status, subscription_end_date')
+          .eq('id', profile.company_id)
+          .maybeSingle();
+
         if (!company) { setView('pending'); setChecking(false); return; }
+
         let status = company.subscription_status;
         if (company.subscription_end_date) {
           const today = new Date().toISOString().split('T')[0];
@@ -289,7 +392,9 @@ const App: React.FC = () => {
           }
         }
         setView(resolveView(status));
-      } catch { setView('landing'); }
+      } catch {
+        setView('landing');
+      }
       setChecking(false);
     };
 
@@ -301,8 +406,7 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Rutas especiales
-  if (contractToken) return <ContractSign token={contractToken} />;
+  if (contractToken)   return <ContractSign token={contractToken} />;
   if (invitationToken) return <><Toaster position="top-right" /><AcceptInvitation token={invitationToken} /></>;
 
   if (checking) return (
@@ -318,12 +422,12 @@ const App: React.FC = () => {
     </div>
   );
 
-  if (view === 'admin') return (<><Toaster position="top-right" /><AdminPanel onExit={() => supabase.auth.signOut()} onPreview={(id: string) => { setPreviewCompanyId(id); setView('preview'); }} /></>);
+  if (view === 'admin')    return (<><Toaster position="top-right" /><AdminPanel onExit={() => supabase.auth.signOut()} onPreview={(id: string) => { setPreviewCompanyId(id); setView('preview'); }} /></>);
   if (view === 'register') return (<><Toaster position="top-right" /><RegisterPage onBack={() => setView('login')} onSuccess={() => setView('login')} /></>);
-  if (view === 'pending' && session) return (<><Toaster position="top-right" /><PendingScreen email={userEmail} onRetry={retryCheck} /></>);
-  if (view === 'past_due' && session) return (<><Toaster position="top-right" /><PastDueScreen email={userEmail} onRetry={retryCheck} /></>);
-  if (view === 'login') return (<><Toaster position="top-right" /><Login onShowLanding={() => setView('landing')} onShowRegister={() => setView('register')} /></>);
-  if (!session) return (<><Toaster position="top-right" /><LandingPage onLogin={() => setView('login')} onRegister={() => setView('register')} /></>);
+  if (view === 'pending'  && session) return (<><Toaster position="top-right" /><PendingScreen  email={userEmail} onRetry={retryCheck} /></>);
+  if (view === 'past_due' && session) return (<><Toaster position="top-right" /><PastDueScreen  email={userEmail} onRetry={retryCheck} /></>);
+  if (view === 'login')    return (<><Toaster position="top-right" /><Login onShowLanding={() => setView('landing')} onShowRegister={() => setView('register')} /></>);
+  if (!session)            return (<><Toaster position="top-right" /><LandingPage onLogin={() => setView('login')} onRegister={() => setView('register')} /></>);
 
   if (view === 'preview' && previewCompanyId) return (
     <>
