@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, Package, Wrench,
   Settings, LogOut, Menu, Building2, User,
-  Landmark, FileText, Globe, Receipt, ShieldCheck
+  Landmark, FileText, Globe, Receipt, ShieldCheck, Users
 } from 'lucide-react';
 import { useCurrency, CurrencyCode } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
@@ -15,27 +15,38 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const { currency, setCurrency } = useCurrency();
-  const { company, isLoading } = useDatabase();
+  const { company, isLoading, userRole, customRole, permissions, hasPermission } = useDatabase();
 
   const handleLogout = async () => { await supabase.auth.signOut(); };
 
-  const isPro = company?.subscription_plan === 'PRO';
+  const plan = company?.subscription_plan || 'BASIC';
+  const isPro = plan === 'PRO' || plan === 'ENTERPRISE';
+  const isEnterprise = plan === 'ENTERPRISE';
+  const isAdminOrMaster = userRole === 'MASTER' || userRole === 'ADMIN';
 
   const navItems = [
-    { label: 'Dashboard',          path: '/',             icon: LayoutDashboard },
-    { label: 'Punto de Venta',     path: '/pos',          icon: ShoppingCart },
-    { label: 'Control de Caja',    path: '/cash-control', icon: Landmark },
-    { label: 'Inventario',         path: '/inventory',    icon: Package },
-    { label: 'Historial Facturas', path: '/invoices',     icon: Receipt },
-    { label: 'Servicio Técnico',   path: '/repairs',      icon: Wrench },
-    { label: 'Cartera / CxC',      path: '/receivables',  icon: FileText },
-    ...(isPro ? [{ label: 'Sucursales', path: '/branches', icon: Building2 }] : []),
-    { label: 'Configuración',      path: '/settings',     icon: Settings },
-  ];
+    { label: 'Dashboard',          path: '/',             icon: LayoutDashboard, show: true },
+    { label: 'Punto de Venta',     path: '/pos',          icon: ShoppingCart,    show: hasPermission('can_sell') || isAdminOrMaster },
+    { label: 'Control de Caja',    path: '/cash-control', icon: Landmark,        show: hasPermission('can_open_cash') || isAdminOrMaster },
+    { label: 'Inventario',         path: '/inventory',    icon: Package,         show: hasPermission('can_manage_inventory') || isAdminOrMaster },
+    { label: 'Historial Facturas', path: '/invoices',     icon: Receipt,         show: hasPermission('can_view_reports') || isAdminOrMaster },
+    { label: 'Servicio Técnico',   path: '/repairs',      icon: Wrench,          show: hasPermission('can_view_repairs') || isAdminOrMaster },
+    { label: 'Cartera / CxC',      path: '/receivables',  icon: FileText,        show: hasPermission('can_view_reports') || isAdminOrMaster },
+    { label: 'Sucursales',         path: '/branches',     icon: Building2,       show: isPro && isAdminOrMaster },
+    { label: 'Equipo',             path: '/team',         icon: Users,           show: isPro && (hasPermission('can_manage_team') || isAdminOrMaster) },
+    { label: 'Configuración',      path: '/settings',     icon: Settings,        show: isAdminOrMaster },
+  ].filter(item => item.show);
 
   const isActive = (path: string) => location.pathname === path;
   const companyName = company?.name ?? 'IPHONESHOP USA';
   const logoUrl = company?.logo_url ?? null;
+
+  // Nombre del rol a mostrar en sidebar
+  const roleDisplay = customRole
+    ? customRole.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+    : userRole === 'MASTER' ? 'Propietario'
+    : userRole === 'ADMIN' ? 'Administrador'
+    : userRole || 'Usuario';
 
   return (
     <div className="flex h-screen bg-slate-50">
@@ -91,11 +102,10 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
             </div>
             <div className="overflow-hidden">
               <p className="text-sm font-medium truncate">{companyName}</p>
-              <p className="text-xs text-slate-400">Administrador</p>
+              <p className="text-xs text-slate-400">{roleDisplay}</p>
             </div>
           </div>
 
-          {/* Botón Panel Admin - solo visible para super admin */}
           {onAdminPanel && (
             <button onClick={onAdminPanel}
               className="flex w-full items-center gap-3 px-4 py-2 text-purple-400 hover:bg-purple-900/20 rounded-lg transition-colors">

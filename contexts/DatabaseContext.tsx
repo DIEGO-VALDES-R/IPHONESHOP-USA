@@ -15,6 +15,8 @@ interface DatabaseContextType {
   sessionsHistory: CashRegisterSession[];
   isLoading: boolean;
   userRole: string | null;
+  customRole: string | null;
+  permissions: Record<string, boolean>;
   availableCompanies: Company[];
   addProduct: (product: Omit<Product, 'id' | 'company_id'>) => Promise<void>;
   updateProduct: (id: string, data: Partial<Product>) => Promise<void>;
@@ -33,6 +35,7 @@ interface DatabaseContextType {
   closeSession: (endAmount: number) => Promise<void>;
   refreshProducts: () => Promise<void>;
   switchCompany: (cid: string) => Promise<void>;
+  hasPermission: (key: string) => boolean;
 }
 
 const DatabaseContext = createContext<DatabaseContextType | undefined>(undefined);
@@ -49,7 +52,16 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
   const [sessionsHistory, setSessionsHistory] = useState<CashRegisterSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [customRole, setCustomRole] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<Record<string, boolean>>({});
   const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
+
+  // Helper: verificar permiso
+  const hasPermission = useCallback((key: string): boolean => {
+    // MASTER y ADMIN tienen todos los permisos
+    if (userRole === 'MASTER' || userRole === 'ADMIN') return true;
+    return permissions[key] === true;
+  }, [userRole, permissions]);
 
   const loadCompany = async (cid: string) => {
     const { data, error } = await supabase.from('companies').select('*').eq('id', cid).single();
@@ -107,11 +119,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
     setIsLoading(false);
   };
 
-  // Obtener o crear branch para una company
   const resolvebranchId = async (cid: string): Promise<string | null> => {
     const { data: branches } = await supabase.from('branches').select('id').eq('company_id', cid).limit(1);
     if (branches && branches.length > 0) return branches[0].id;
-    // Si no hay branch, crear uno automáticamente
     const { data: newBranch, error } = await supabase.from('branches').insert({
       company_id: cid, name: 'Principal', is_active: true,
     }).select('id').single();
@@ -123,6 +133,8 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
     if (overrideCompanyId) {
       setCompanyId(overrideCompanyId);
       setUserRole('ADMIN');
+      setCustomRole(null);
+      setPermissions({});
       resolvebranchId(overrideCompanyId).then(bid => setBranchId(bid));
       loadAllData(overrideCompanyId);
       return;
@@ -133,7 +145,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
       if (!user) { setIsLoading(false); return; }
 
       const { data: profile, error } = await supabase
-        .from('profiles').select('company_id, branch_id, role').eq('id', user.id).maybeSingle();
+        .from('profiles')
+        .select('company_id, branch_id, role, custom_role, permissions')
+        .eq('id', user.id).maybeSingle();
 
       if (error || !profile) {
         console.warn('⚠️ Sin perfil para este usuario:', user.email);
@@ -142,15 +156,13 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
       }
 
       setUserRole(profile.role);
+      setCustomRole(profile.custom_role || null);
+      setPermissions(profile.permissions || {});
 
       if (profile.company_id) {
         setCompanyId(profile.company_id);
-
-        // Resolver branchId: usar el del perfil o buscar/crear uno
         let bid = profile.branch_id || null;
-        if (!bid) {
-          bid = await resolvebranchId(profile.company_id);
-        }
+        if (!bid) bid = await resolvebranchId(profile.company_id);
         setBranchId(bid);
         await loadAllData(profile.company_id);
       } else {
@@ -230,7 +242,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
     const random = Math.floor(Math.random() * 100).toString().padStart(2, '0');
     const invoiceNumber = `POS-${timestamp}${random}`;
 
-    // 1️⃣ Crear la factura
     const { data: invoice, error: invErr } = await supabase.from('invoices').insert({
       company_id: companyId, branch_id: resolvedBranchId, invoice_number: invoiceNumber,
       customer_id: null,
@@ -247,7 +258,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
 
     if (invErr) throw invErr;
 
-    // 2️⃣ Insertar items de la factura
     await supabase.from('invoice_items').insert(
       saleData.items.map((i: any) => ({
         invoice_id: invoice.id, product_id: i.product.id,
@@ -255,38 +265,25 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
       }))
     );
 
-    // 3️⃣ Actualizar stock en Supabase de forma SECUENCIAL (evita race condition)
-    //    Usamos el stock que ya está en memoria (i.product.stock_quantity)
-    //    para no necesitar consultar Supabase por cada item.
     for (const i of saleData.items.filter((i: any) => i.product.type !== 'SERVICE')) {
       const currentStock = i.product.stock_quantity ?? 0;
       const newStock = Math.max(0, currentStock - i.quantity);
-      await supabase.from('products')
-        .update({ stock_quantity: newStock })
-        .eq('id', i.product.id);
+      await supabase.from('products').update({ stock_quantity: newStock }).eq('id', i.product.id);
     }
 
-    // 4️⃣ Reflejar el nuevo stock en el estado LOCAL de forma INMEDIATA
-    //    Esto hace que el POS oculte el producto al instante, sin esperar
-    //    el round-trip de loadProducts() a Supabase.
     setProducts(prev => prev.map(p => {
-      const soldItem = saleData.items.find(
-        (i: any) => i.product.id === p.id && i.product.type !== 'SERVICE'
-      );
+      const soldItem = saleData.items.find((i: any) => i.product.id === p.id && i.product.type !== 'SERVICE');
       if (!soldItem) return p;
       return { ...p, stock_quantity: Math.max(0, (p.stock_quantity ?? 0) - soldItem.quantity) };
     }));
 
-    // 5️⃣ Actualizar sesión de caja
     if (session?.id) {
       await supabase.from('cash_register_sessions')
         .update({ total_sales_cash: (session.total_sales_cash || 0) + saleData.total })
         .eq('id', session.id);
     }
 
-    // 6️⃣ Sincronizar con Supabase en background para mantener consistencia
     await Promise.all([loadProducts(companyId), loadSales(companyId), loadSession(companyId)]);
-
     toast.success('Venta guardada');
     return invoice as any;
   };
@@ -307,12 +304,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
     if (!companyId) { toast.error('No hay empresa configurada'); return; }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { toast.error('No hay sesión de usuario'); return; }
-
-    // Resolver branchId si no está disponible
     const resolvedBranchId = branchId || await resolvebranchId(companyId);
     if (!resolvedBranchId) { toast.error('No se pudo obtener la sucursal'); return; }
     if (!branchId) setBranchId(resolvedBranchId);
-
     const { error } = await supabase.from('cash_register_sessions').insert({
       company_id: companyId,
       register_id: '00000000-0000-0000-0000-000000000000',
@@ -340,10 +334,10 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
   return (
     <DatabaseContext.Provider value={{
       company, companyId, branchId, products, repairs, sales, customers,
-      session, sessionsHistory, isLoading, userRole, availableCompanies,
-      addProduct, updateProduct, deleteProduct, addRepair, updateRepairStatus,
-      processSale, updateCompanyConfig, saveDianSettings, openSession,
-      closeSession, refreshProducts, switchCompany,
+      session, sessionsHistory, isLoading, userRole, customRole, permissions,
+      availableCompanies, addProduct, updateProduct, deleteProduct, addRepair,
+      updateRepairStatus, processSale, updateCompanyConfig, saveDianSettings,
+      openSession, closeSession, refreshProducts, switchCompany, hasPermission,
     }}>
       {children}
     </DatabaseContext.Provider>
