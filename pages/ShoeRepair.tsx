@@ -205,11 +205,27 @@ const ShoeRepair: React.FC = () => {
     if (error) { toast.error(error.message); setSaving(false); return; }
     await addHistory(order.id, 'RECEPTION', `Recibido: ${orderForm.product_description}. Daño: ${orderForm.damage_description}`);
     if (tech) await addHistory(order.id, 'ASSIGNED', `Asignado a ${tech.name}`);
-    toast.success(`✅ Ticket ${ticketNumber} creado`);
+    toast.success(`✅ Ticket ${ticketNumber} creado — Abriendo POS...`);
     setShowNewOrder(false);
     setOrderForm({ ...emptyOrder });
     setSaving(false);
     loadOrders();
+
+    // ── Redirigir al POS inmediatamente al crear la orden ──
+    const estimatedPrice = parseFloat(orderForm.estimated_price) || 0;
+    const depositAmount  = parseFloat(orderForm.deposit_amount)  || 0;
+    const params = new URLSearchParams({
+      shoe:     order.id,
+      ticket:   ticketNumber,
+      cliente:  orderForm.client_name,
+      cedula:   orderForm.client_id    || '',
+      tel:      orderForm.client_phone || '',
+      email:    orderForm.client_phone || '',
+      total:    String(estimatedPrice),
+      abono:    String(depositAmount),
+      servicio: orderForm.service_type,
+    });
+    navigate(`/pos?${params.toString()}`);
   };
 
   // ── UPDATE STATUS ─────────────────────────────────────────────────────────

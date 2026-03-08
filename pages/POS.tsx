@@ -74,6 +74,9 @@ const POS: React.FC = () => {
         tax_rate: 0,
       },
       quantity: 1,
+      price: total,      // ← requerido por CartItem para calcular totales
+      tax_rate: 0,       // sin IVA para servicios de zapatería
+      discount: 0,
     };
     setCart([virtualService]);
     setApplyIva(false);
@@ -84,10 +87,8 @@ const POS: React.FC = () => {
       setPayments([{ method: PaymentMethod.CASH, amount: abono }]);
     }
 
-    // Abrir modal de pago automáticamente cuando sea posible
-    if (session?.status === 'OPEN') {
-      setTimeout(() => setIsPaymentModalOpen(true), 600);
-    }
+    // Abrir modal de pago automáticamente
+    setTimeout(() => setIsPaymentModalOpen(true), 700);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
@@ -195,29 +196,33 @@ const POS: React.FC = () => {
       return;
     }
 
-    const sale = await processSale({
-      customer:    customerName || 'Consumidor Final',
-      customerDoc, customerEmail, customerPhone,
-      items:       cart,
-      total:       totals.total,
-      subtotal:    totals.subtotal,
-      taxAmount:   totals.tax,
-      applyIva,
-      discountPercent: clampedDiscount,
-      discountAmount:  totals.discountAmount,
-      amountPaid:   amountPaid,
-      shoeRepairId: shoeRepairId || undefined,
-    });
+    try {
+      const sale = await processSale({
+        customer:    customerName || 'Consumidor Final',
+        customerDoc, customerEmail, customerPhone,
+        items:       cart,
+        total:       totals.total,
+        subtotal:    totals.subtotal,
+        taxAmount:   totals.tax,
+        applyIva,
+        discountPercent: clampedDiscount,
+        discountAmount:  totals.discountAmount,
+        amountPaid:   amountPaid,
+        shoeRepairId: shoeRepairId || undefined,
+      });
 
-    setLastSale({ ...sale, _cartItems: cart, discountPercent: clampedDiscount, discountAmount: totals.discountAmount } as any);
-    setShowInvoice(true);
-    setCart([]); setPayments([]);
-    setGlobalDiscount('');
-    setCustomerName(''); setCustomerDoc(''); setCustomerEmail(''); setCustomerPhone('');
-    setIsPartialMode(false); setShoeRepairId(''); setShoeRepairLabel('');
-    setIsPaymentModalOpen(false);
-    // Limpiar params de URL
-    navigate('/pos', { replace: true });
+      setLastSale({ ...sale, _cartItems: cart, discountPercent: clampedDiscount, discountAmount: totals.discountAmount } as any);
+      setShowInvoice(true);
+      setCart([]); setPayments([]);
+      setGlobalDiscount('');
+      setCustomerName(''); setCustomerDoc(''); setCustomerEmail(''); setCustomerPhone('');
+      setIsPartialMode(false); setShoeRepairId(''); setShoeRepairLabel('');
+      setIsPaymentModalOpen(false);
+      navigate('/pos', { replace: true });
+    } catch (err: any) {
+      console.error('Error al facturar:', err);
+      toast.error('Error al facturar: ' + (err?.message || 'Error desconocido'));
+    }
   };
 
   if (session?.status !== 'OPEN') {

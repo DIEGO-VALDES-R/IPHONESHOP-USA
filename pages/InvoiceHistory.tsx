@@ -3,7 +3,7 @@ import {
   Search, FileText, Eye, X, ChevronDown, ChevronUp,
   User, Calendar, Hash, DollarSign, AlertCircle,
   CheckCircle, Clock, XCircle, Printer, MessageCircle,
-  Mail, QrCode, AlertTriangle, Package, Zap
+  Mail, QrCode, AlertTriangle, Package, Zap, Trash2
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -131,18 +131,27 @@ const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, compan
               </tr>
             </thead>
             <tbody>
-              {!invoice.invoice_items || invoice.invoice_items.length === 0 ? (
-                <tr><td colSpan={3} className="text-center text-slate-400 py-4">Sin items registrados</td></tr>
-              ) : invoice.invoice_items.map((item, idx) => (
-                <tr key={idx} className="border-b border-slate-100">
-                  <td className="py-2 align-top">{item.quantity}</td>
-                  <td className="py-2 align-top">
-                    <div>{item.products?.name || `Producto`}</div>
-                    {item.serial_number && <div className="text-[10px] text-slate-500">SN: {item.serial_number}</div>}
-                  </td>
-                  <td className="py-2 text-right align-top">{formatMoney(item.price * item.quantity)}</td>
-                </tr>
-              ))}
+              {(() => {
+                const realItems = invoice.invoice_items || [];
+                const virtualItems = (invoice.payment_method as any)?.virtual_items || [];
+                const allItems = [
+                  ...realItems.map((item: any) => ({ name: item.products?.name || 'Producto', qty: item.quantity, price: item.price, serial: item.serial_number })),
+                  ...virtualItems.map((v: any) => ({ name: v.name || 'Servicio', qty: v.quantity, price: v.price, serial: null })),
+                ];
+                if (allItems.length === 0) {
+                  return <tr><td colSpan={3} className="text-center text-slate-400 py-4">Sin items registrados</td></tr>;
+                }
+                return allItems.map((item, idx) => (
+                  <tr key={idx} className="border-b border-slate-100">
+                    <td className="py-2 align-top">{item.qty}</td>
+                    <td className="py-2 align-top">
+                      <div>{item.name}</div>
+                      {item.serial && <div className="text-[10px] text-slate-500">SN: {item.serial}</div>}
+                    </td>
+                    <td className="py-2 text-right align-top">{formatMoney(item.price * item.qty)}</td>
+                  </tr>
+                ));
+              })()}
             </tbody>
           </table>
 
@@ -289,6 +298,22 @@ const InvoiceHistory: React.FC = () => {
     setSelectedInvoice(null);
   };
 
+  const handleDeleteInvoice = async (inv: Invoice, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`¿Eliminar la factura ${inv.invoice_number}? Esta acción no se puede deshacer.`)) return;
+    try {
+      // Eliminar items primero (FK), luego la factura
+      await supabase.from('invoice_items').delete().eq('invoice_id', inv.id);
+      const { error } = await supabase.from('invoices').delete().eq('id', inv.id);
+      if (error) throw error;
+      setInvoices(prev => prev.filter(i => i.id !== inv.id));
+      setTotal(t => t - 1);
+      if (selectedInvoice?.id === inv.id) setSelectedInvoice(null);
+    } catch (e: any) {
+      alert('Error al eliminar: ' + e.message);
+    }
+  };
+
   const hasMore = invoices.length < total;
   const totalShown = invoices.reduce((s, inv) => s + inv.total_amount, 0);
 
@@ -422,6 +447,10 @@ const InvoiceHistory: React.FC = () => {
                             <button onClick={e => { e.stopPropagation(); setSelectedInvoice(inv); }}
                               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Ver factura completa">
                               <Eye size={15} />
+                            </button>
+                            <button onClick={e => handleDeleteInvoice(inv, e)}
+                              className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar factura">
+                              <Trash2 size={15} />
                             </button>
                             {isExpanded ? <ChevronUp size={15} className="text-slate-400" /> : <ChevronDown size={15} className="text-slate-400" />}
                           </div>

@@ -258,31 +258,47 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
       company_id: companyId, branch_id: resolvedBranchId, invoice_number: invoiceNumber,
       customer_id: null,
       subtotal: Math.round(saleData.subtotal), tax_amount: Math.round(saleData.taxAmount),
-      total_amount: saleData.total, status: 'PENDING_ELECTRONIC',
-      // Campos de abono
-      amount_paid:    amountPaid,
-      balance_due:    balanceDue,
-      payment_status: paymentStatus,
-      client_id:      saleData.customerDoc || null,
+      total_amount: Math.round(saleData.total), status: 'PENDING_ELECTRONIC',
+      notes: saleData.notes || null,
+      // Guardar toda la info del cliente y pago en el campo jsonb payment_method
       payment_method: {
         method: 'CASH', amount: amountPaid,
-        customer_name: saleData.customer || null,
+        customer_name:     saleData.customer || null,
         customer_document: saleData.customerDoc || null,
-        customer_email: saleData.customerEmail || null,
-        customer_phone: saleData.customerPhone || null,
+        customer_email:    saleData.customerEmail || null,
+        customer_phone:    saleData.customerPhone || null,
+        balance_due:       balanceDue,
+        payment_status:    paymentStatus,
+        // Items de servicios virtuales (zapatería, etc.) que no tienen product_id real
+        virtual_items: saleData.items
+          .filter((i: any) => String(i.product.id).startsWith('shoe-'))
+          .map((i: any) => ({
+            name:     i.product.name,
+            price:    i.price ?? i.product.price,
+            quantity: i.quantity,
+            sku:      i.product.sku,
+          })),
       }
     }).select().single();
 
     if (invErr) throw invErr;
 
-    await supabase.from('invoice_items').insert(
-      saleData.items.map((i: any) => ({
-        invoice_id: invoice.id, product_id: i.product.id,
-        quantity: i.quantity, price: i.product.price, tax_rate: i.product.tax_rate ?? 0,
-      }))
-    );
+    // Solo insertar items con product_id real (UUID válido, no ids virtuales de zapatería)
+    const realItems = saleData.items.filter((i: any) => !String(i.product.id).startsWith('shoe-'));
+    if (realItems.length > 0) {
+      const itemsToInsert = realItems.map((i: any) => ({
+        invoice_id:    invoice.id,
+        product_id:    i.product.id,
+        quantity:      i.quantity,
+        price:         i.price ?? i.product.price,
+        tax_rate:      i.tax_rate ?? i.product.tax_rate ?? 0,
+        serial_number: i.serial_number || null,
+      }));
+      const { error: itemsErr } = await supabase.from('invoice_items').insert(itemsToInsert);
+      if (itemsErr) console.error('Error insertando items:', itemsErr);
+    }
 
-    // Si viene de zapatería, registrar abono inicial y vincular factura
+    // Si viene de zapatería, vincular factura y registrar en historial
     if (saleData.shoeRepairId) {
       await supabase.from('shoe_repair_orders')
         .update({ invoice_id: invoice.id, status: 'DELIVERED' })
@@ -294,19 +310,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
         description: `Factura generada: ${invoiceNumber}. Pagado: $${amountPaid.toLocaleString('es-CO')}${balanceDue > 0 ? ` · Saldo pendiente: $${balanceDue.toLocaleString('es-CO')}` : ''}`,
         user_name: 'POS',
       });
-    }
-
-    // Registrar pago inicial en historial de pagos si hay monto pagado
-    if (amountPaid > 0) {
-      await supabase.from('invoice_payments').insert({
-        company_id: companyId,
-        invoice_id: invoice.id,
-        source_type: saleData.shoeRepairId ? 'SHOE_REPAIR' : 'POS',
-        amount: amountPaid,
-        payment_method: 'cash',
-        reference: '',
-        user_name: 'POS',
-      }).select();
     }
 
     for (const i of saleData.items.filter((i: any) => i.product.type !== 'SERVICE')) {
