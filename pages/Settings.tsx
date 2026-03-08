@@ -1,5 +1,5 @@
-﻿import React, { useState, useRef } from 'react';
-import { Save, Building, Receipt, Shield, X, CreditCard, Upload, Image as ImageIcon, Lock, KeyRound, FileCode, Check, AlertTriangle } from 'lucide-react';
+﻿import React, { useState, useRef, useEffect } from 'react';
+import { Save, Building, Receipt, Shield, X, CreditCard, Upload, Image as ImageIcon, Lock, KeyRound, FileCode, Check, AlertTriangle, Palette } from 'lucide-react';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { toast } from 'react-hot-toast';
 import { supabase } from '../supabaseClient';
@@ -11,16 +11,49 @@ const PLANS = [
   { id: 'ENTERPRISE', name: 'Plan Enterprise', price: '$99.99 / mes', features: ['Usuarios Ilimitados', 'Sucursales Ilimitadas', 'API Access', 'Gestor Dedicado', 'SLA 99.9%'], color: 'border-purple-200' }
 ];
 
+const BUSINESS_TYPES = [
+  { id: 'general',           label: '🏪 Tienda General' },
+  { id: 'tienda_tecnologia', label: '📱 Tecnología / Celulares' },
+  { id: 'restaurante',       label: '🍽️ Restaurante / Cafetería' },
+  { id: 'ropa',              label: '👗 Ropa / Calzado' },
+  { id: 'ferreteria',        label: '🔧 Ferretería / Construcción' },
+  { id: 'farmacia',          label: '💊 Farmacia / Droguería' },
+  { id: 'supermercado',      label: '🛒 Supermercado / Abarrotes' },
+  { id: 'salon',             label: '💇 Salón de Belleza / Spa' },
+  { id: 'otro',              label: '📦 Otro' },
+];
+
+const COLOR_PRESETS = [
+  { label: 'Azul',    primary: '#3b82f6', secondary: '#6366f1' },
+  { label: 'Verde',   primary: '#10b981', secondary: '#059669' },
+  { label: 'Morado',  primary: '#8b5cf6', secondary: '#7c3aed' },
+  { label: 'Rojo',    primary: '#ef4444', secondary: '#dc2626' },
+  { label: 'Naranja', primary: '#f59e0b', secondary: '#d97706' },
+  { label: 'Rosa',    primary: '#ec4899', secondary: '#db2777' },
+  { label: 'Gris',    primary: '#475569', secondary: '#334155' },
+  { label: 'Negro',   primary: '#0f172a', secondary: '#1e293b' },
+];
+
 const MASTER_KEY = 'admin123';
 
 const Settings: React.FC = () => {
   const { company, updateCompanyConfig, saveDianSettings } = useDatabase();
 
-  const safeCompany = company || { id: '', name: '', nit: '', phone: '', address: '', email: '', subscription_plan: 'BASIC', subscription_status: 'ACTIVE', logo_url: '', config: { tax_rate: 19, invoice_prefix: 'POS', dian_resolution: '', dian_date: '', dian_range_from: '', dian_range_to: '' }, dian_settings: null };
+  const safeCompany = company || {
+    id: '', name: '', nit: '', phone: '', address: '', email: '',
+    subscription_plan: 'BASIC', subscription_status: 'ACTIVE', logo_url: '',
+    primary_color: '#3b82f6', secondary_color: '#6366f1', business_type: 'general',
+    config: { tax_rate: 19, invoice_prefix: 'POS', dian_resolution: '', dian_date: '', dian_range_from: '', dian_range_to: '' },
+    dian_settings: null
+  };
 
   const [formData, setFormData] = useState(safeCompany);
-  const [activeTab, setActiveTab] = useState<'GENERAL' | 'DIAN'>('GENERAL');
+  const [activeTab, setActiveTab] = useState<'GENERAL' | 'DIAN' | 'BRANDING'>('GENERAL');
   const [taxRate, setTaxRate] = useState<number>(safeCompany.config?.tax_rate ?? 19);
+  const [primaryColor, setPrimaryColor] = useState(safeCompany.primary_color || '#3b82f6');
+  const [secondaryColor, setSecondaryColor] = useState(safeCompany.secondary_color || '#6366f1');
+  const [businessType, setBusinessType] = useState(safeCompany.business_type || 'general');
+  const [savingBranding, setSavingBranding] = useState(false);
 
   const [dianForm, setDianForm] = useState<DianSettings>(safeCompany.dian_settings || {
     company_id: safeCompany.id, software_id: '', software_pin: '',
@@ -43,8 +76,28 @@ const Settings: React.FC = () => {
         ...formData,
         config: { ...(formData.config || {}), tax_rate: taxRate }
       });
-    } else {
+    } else if (activeTab === 'DIAN') {
       saveDianSettings(dianForm);
+    }
+  };
+
+  const handleSaveBranding = async () => {
+    if (!safeCompany.id) return;
+    setSavingBranding(true);
+    try {
+      const { error } = await supabase.from('companies').update({
+        primary_color: primaryColor,
+        secondary_color: secondaryColor,
+        business_type: businessType,
+      }).eq('id', safeCompany.id);
+      if (error) throw error;
+      // También actualizar via updateCompanyConfig para refrescar el contexto
+      updateCompanyConfig({ primary_color: primaryColor, secondary_color: secondaryColor, business_type: businessType } as any);
+      toast.success('¡Personalización guardada!');
+    } catch (err: any) {
+      toast.error('Error: ' + err.message);
+    } finally {
+      setSavingBranding(false);
     }
   };
 
@@ -68,40 +121,42 @@ const Settings: React.FC = () => {
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  if (!e.target.files || e.target.files.length === 0) return;
-  const file = e.target.files[0];
-  setIsUploading(true);
-  try {
-    const ext = file.name.split('.').pop();
-    const fileName = `logo-${safeCompany.id}-${Date.now()}.${ext}`;
-    const { error } = await supabase.storage
-      .from('company-logos')
-      .upload(fileName, file, { upsert: true });
-    if (error) { toast.error('Error al subir: ' + error.message); return; }
-    const { data } = supabase.storage.from('company-logos').getPublicUrl(fileName);
-    setFormData({ ...formData, logo_url: data.publicUrl });
-    updateCompanyConfig({ logo_url: data.publicUrl });
-    toast.success('Logo subido correctamente');
-  } catch (err: any) {
-    toast.error('Error: ' + err.message);
-  } finally {
-    setIsUploading(false);
-  }
-};
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    setIsUploading(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const fileName = `logo-${safeCompany.id}-${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from('company-logos').upload(fileName, file, { upsert: true });
+      if (error) { toast.error('Error al subir: ' + error.message); return; }
+      const { data } = supabase.storage.from('company-logos').getPublicUrl(fileName);
+      setFormData({ ...formData, logo_url: data.publicUrl });
+      updateCompanyConfig({ logo_url: data.publicUrl });
+      toast.success('Logo subido correctamente');
+    } catch (err: any) {
+      toast.error('Error: ' + err.message);
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const currentPlan = PLANS.find(p => p.id === safeCompany.subscription_plan) || PLANS[0];
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Configuracion</h2>
           <p className="text-slate-500">Administra los datos de tu empresa</p>
         </div>
-        <div className="flex bg-white rounded-lg p-1 border border-slate-200">
+        <div className="flex bg-white rounded-lg p-1 border border-slate-200 flex-wrap gap-1">
           <button onClick={() => setActiveTab('GENERAL')}
             className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'GENERAL' ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}>
             General
+          </button>
+          <button onClick={() => setActiveTab('BRANDING')}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${activeTab === 'BRANDING' ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+            <Palette size={15} /> Marca
           </button>
           <button onClick={() => setActiveTab('DIAN')}
             className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${activeTab === 'DIAN' ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}>
@@ -112,12 +167,13 @@ const Settings: React.FC = () => {
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
-          {activeTab === 'GENERAL' ? (
+
+          {/* ── TAB GENERAL ── */}
+          {activeTab === 'GENERAL' && (
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
               <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
                 <Building size={20} className="text-blue-600" /> Datos Generales
               </h3>
-
               {/* Logo */}
               <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg border border-slate-100">
                 <div className="relative w-20 h-20 rounded-lg bg-slate-200 border border-slate-300 flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -133,7 +189,6 @@ const Settings: React.FC = () => {
                   <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
                 </div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Nombre Comercial</label>
@@ -155,8 +210,6 @@ const Settings: React.FC = () => {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
                   <input type="email" className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.email || ''} onChange={e => setFormData({ ...formData, email: e.target.value })} />
                 </div>
-
-                {/* IVA POR DEFECTO */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">IVA por Defecto</label>
                   <select value={taxRate} onChange={e => setTaxRate(Number(e.target.value))}
@@ -169,7 +222,96 @@ const Settings: React.FC = () => {
                 </div>
               </div>
             </div>
-          ) : (
+          )}
+
+          {/* ── TAB MARCA / BRANDING ── */}
+          {activeTab === 'BRANDING' && (
+            <div className="space-y-6">
+              {/* Vista previa */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-6">
+                  <Palette size={20} className="text-blue-600" /> Personalización de Marca
+                </h3>
+
+                {/* Preview */}
+                <div className="mb-6 rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                  <div style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}
+                    className="p-4 flex items-center gap-3">
+                    {formData.logo_url
+                      ? <img src={formData.logo_url} alt="logo" className="h-10 w-auto rounded-lg bg-white/20 p-1" />
+                      : <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center text-white font-bold text-lg">{(formData.name || 'M').charAt(0)}</div>
+                    }
+                    <div>
+                      <p className="text-white font-bold text-base">{formData.name || 'Mi Negocio'}</p>
+                      <p className="text-white/70 text-xs">{BUSINESS_TYPES.find(b => b.id === businessType)?.label || 'Tienda'}</p>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 p-4 flex gap-2">
+                    <div style={{ background: primaryColor }} className="h-8 px-4 rounded-lg flex items-center text-white text-sm font-bold">Botón principal</div>
+                    <div style={{ background: secondaryColor }} className="h-8 px-4 rounded-lg flex items-center text-white text-sm font-bold">Secundario</div>
+                    <div style={{ color: primaryColor }} className="h-8 px-4 rounded-lg flex items-center text-sm font-bold border-2" style={{ borderColor: primaryColor, color: primaryColor }}>Borde</div>
+                  </div>
+                </div>
+
+                {/* Tipo de negocio */}
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-slate-700 mb-3">Tipo de negocio</label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {BUSINESS_TYPES.map(bt => (
+                      <button key={bt.id} type="button" onClick={() => setBusinessType(bt.id)}
+                        className={`p-3 rounded-lg border-2 text-sm font-medium text-left transition-all ${businessType === bt.id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 hover:border-slate-300 text-slate-600'}`}>
+                        {bt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Colores preset */}
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-slate-700 mb-3">Color de marca</label>
+                  <div className="flex flex-wrap gap-3">
+                    {COLOR_PRESETS.map(preset => (
+                      <button key={preset.label} type="button" onClick={() => { setPrimaryColor(preset.primary); setSecondaryColor(preset.secondary); }}
+                        title={preset.label}
+                        className={`w-10 h-10 rounded-full border-4 transition-all ${primaryColor === preset.primary ? 'border-slate-800 scale-110' : 'border-transparent hover:scale-105'}`}
+                        style={{ background: `linear-gradient(135deg, ${preset.primary}, ${preset.secondary})` }} />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Colores custom */}
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Color primario</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)}
+                        className="w-10 h-10 rounded-lg border border-slate-300 cursor-pointer p-0.5" />
+                      <input type="text" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Color secundario</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)}
+                        className="w-10 h-10 rounded-lg border border-slate-300 cursor-pointer p-0.5" />
+                      <input type="text" value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                  </div>
+                </div>
+
+                <button type="button" onClick={handleSaveBranding} disabled={savingBranding}
+                  className="w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-white transition-all"
+                  style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})`, opacity: savingBranding ? 0.7 : 1 }}>
+                  <Save size={18} /> {savingBranding ? 'Guardando...' : 'Guardar Personalización'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── TAB DIAN ── */}
+          {activeTab === 'DIAN' && (
             <div className="space-y-6">
               <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                 <div className="flex justify-between items-start mb-6">
@@ -235,7 +377,7 @@ const Settings: React.FC = () => {
           )}
         </div>
 
-        {/* Sidebar */}
+        {/* ── SIDEBAR ── */}
         <div className="space-y-6">
           <div className="bg-slate-900 text-white p-6 rounded-xl shadow-lg relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-10"><Shield size={100} /></div>
@@ -257,13 +399,29 @@ const Settings: React.FC = () => {
             </button>
           </div>
 
-          <button type="submit" className="w-full py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 shadow-lg flex items-center justify-center gap-2">
-            <Save size={20} /> {activeTab === 'GENERAL' ? 'Guardar Cambios' : 'Guardar Config. DIAN'}
-          </button>
+          {/* Color preview en sidebar */}
+          {activeTab === 'BRANDING' && (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+              <div style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }} className="h-16" />
+              <div className="p-4">
+                <p className="text-xs font-semibold text-slate-500 mb-2">Vista previa</p>
+                <div className="flex gap-2">
+                  <div className="w-6 h-6 rounded-full border-2 border-white shadow" style={{ background: primaryColor }} />
+                  <div className="w-6 h-6 rounded-full border-2 border-white shadow" style={{ background: secondaryColor }} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab !== 'BRANDING' && (
+            <button type="submit" className="w-full py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 shadow-lg flex items-center justify-center gap-2">
+              <Save size={20} /> {activeTab === 'GENERAL' ? 'Guardar Cambios' : 'Guardar Config. DIAN'}
+            </button>
+          )}
         </div>
       </form>
 
-      {/* Modal Seguridad */}
+      {/* ── MODAL SEGURIDAD ── */}
       {isSecurityCheckOpen && (
         <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl w-full max-w-sm shadow-2xl overflow-hidden">
@@ -289,7 +447,7 @@ const Settings: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Suscripcion */}
+      {/* ── MODAL SUSCRIPCION ── */}
       {isSubscriptionModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
