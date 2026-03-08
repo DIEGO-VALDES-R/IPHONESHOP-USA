@@ -43,6 +43,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
 
   // Brand color from Settings > Marca (stored in company.config.primary_color)
   const brandColor = (company?.config as any)?.primary_color || '#1e293b';
+  const fontColor  = (company?.config as any)?.font_color   || '#ffffff';
   const hexToRgb = (hex: string) => {
     if (!hex || hex.length < 7) return '30,41,59';
     return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
@@ -77,15 +78,15 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
         </div>
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-2">
+          <label className="block text-[10px] font-bold uppercase tracking-wider mb-2 px-2" style={{ color: fontColor, opacity: 0.45 }}>
             Menú Principal
           </label>
           {navItems.map((item) => (
             <Link key={item.path} to={item.path}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                isActive(item.path) ? 'text-white font-semibold' : 'text-white/60 hover:text-white'
+                isActive(item.path) ? 'font-semibold' : ''
               }`}
-              style={{ background: isActive(item.path) ? 'rgba(0,0,0,0.3)' : 'transparent' }}>
+              style={{ background: isActive(item.path) ? 'rgba(0,0,0,0.3)' : 'transparent', color: fontColor }}>
               <item.icon size={20} />
               <span className="font-medium">{item.label}</span>
             </Link>
@@ -94,9 +95,9 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
 
         <div className="p-4 space-y-2" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
           <div className="flex items-center gap-3 px-4 py-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.2)' }}>
-            <Globe size={18} className="text-slate-400" />
+            <Globe size={18} style={{ color: fontColor, opacity: 0.7 }} />
             <select value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
-              className="bg-transparent text-sm font-medium text-white focus:outline-none w-full cursor-pointer">
+              className="bg-transparent text-sm font-medium focus:outline-none w-full cursor-pointer" style={{ color: fontColor }}>
               <option value="COP" className="text-slate-900">COP (Peso)</option>
               <option value="USD" className="text-slate-900">USD (Dólar)</option>
               <option value="EUR" className="text-slate-900">EUR (Euro)</option>
@@ -108,8 +109,8 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
               <User size={16} />
             </div>
             <div className="overflow-hidden">
-              <p className="text-sm font-medium truncate">{companyName}</p>
-              <p className="text-xs text-slate-400">{roleDisplay}</p>
+              <p className="text-sm font-medium truncate" style={{ color: fontColor }}>{companyName}</p>
+              <p className="text-xs" style={{ color: fontColor, opacity: 0.65 }}>{roleDisplay}</p>
             </div>
           </div>
 
