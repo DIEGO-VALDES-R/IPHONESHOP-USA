@@ -8,14 +8,31 @@ const LICENCIANTE = {
   ciudad_cedula: 'Cali',
   domicilio: 'Cúcuta',
   firma_url: 'https://wdaabpbpxbbfhurvjvwj.supabase.co/storage/v1/object/public/company-logos/firma_diego.png',
-  email: 'diegoferrangel@gmail.com',
-  whatsapp: '573204884943',
+  email: import.meta.env.VITE_CONTACT_EMAIL || 'diegoferrangel@gmail.com',
+  whatsapp: import.meta.env.VITE_WHATSAPP_NUMBER || '573204884943',
 };
 
 const PLAN_PRECIOS: Record<string, string> = {
   TRIAL: 'Gratis – 7 días',
   BASIC: '$65.000/mes',
   PRO: '$120.000/mes',
+};
+
+// ── CORRECCIÓN FRO-03 — Límites de validación para uploads de firma ──────────
+const FIRMA_MAX_SIZE_BYTES = 2 * 1024 * 1024; // 2MB máximo
+const FIRMA_ALLOWED_TYPE   = 'image/png';
+
+const validateFirmaBlob = (blob: Blob): { valid: boolean; error?: string } => {
+  if (blob.type !== FIRMA_ALLOWED_TYPE) {
+    return { valid: false, error: `Tipo de archivo no permitido: ${blob.type}. Solo PNG.` };
+  }
+  if (blob.size > FIRMA_MAX_SIZE_BYTES) {
+    return { valid: false, error: `La firma excede el tamaño máximo de 2MB.` };
+  }
+  if (blob.size < 100) {
+    return { valid: false, error: 'La firma parece estar vacía. Por favor firma de nuevo.' };
+  }
+  return { valid: true };
 };
 
 // ── TIPOS ─────────────────────────────────────────────────────────────────────
@@ -27,7 +44,7 @@ interface Contract {
   created_at: string;
 }
 
-// ── GENERADOR DE PDF (HTML → Blob via print) ──────────────────────────────────
+// ── GENERADOR DE PDF ──────────────────────────────────────────────────────────
 const generateContractHTML = (contract: Contract, clientSigDataUrl: string): string => {
   const today = new Date().toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' });
   const planLabel = PLAN_PRECIOS[contract.plan] || contract.plan;
@@ -137,6 +154,13 @@ export const ContractSign: React.FC<{ token: string }> = ({ token }) => {
 
   useEffect(() => {
     const load = async () => {
+      // ── CORRECCIÓN FRO-03 — Validar formato del token antes de consultar ──
+      if (!/^[a-f0-9]{64}$/.test(token)) {
+        setError('Enlace de contrato inválido.');
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('contracts').select('*').eq('token', token).maybeSingle();
       if (error || !data) { setError('Contrato no encontrado o enlace inválido.'); setLoading(false); return; }
@@ -147,7 +171,6 @@ export const ContractSign: React.FC<{ token: string }> = ({ token }) => {
     load();
   }, [token]);
 
-  // Canvas setup
   useEffect(() => {
     if (!canvasRef.current || !contract) return;
     const canvas = canvasRef.current;
@@ -212,12 +235,27 @@ export const ContractSign: React.FC<{ token: string }> = ({ token }) => {
     try {
       const sigDataUrl = canvasRef.current.toDataURL('image/png');
 
-      // Subir firma a Supabase Storage
-      const base64 = sigDataUrl.split(',')[1];
+      // ── CORRECCIÓN FRO-03 — Validar blob antes de subir ──────────────────
+      const base64    = sigDataUrl.split(',')[1];
       const byteArray = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-      const fileName = `signatures/${contract.token}.png`;
+      const blob      = new Blob([byteArray], { type: 'image/png' });
+
+      const validation = validateFirmaBlob(blob);
+      if (!validation.valid) {
+        setError(validation.error || 'Firma inválida.');
+        setSubmitting(false);
+        return;
+      }
+
+      // Nombre de archivo con contract.id para evitar colisiones
+      const fileName = `signatures/${contract.id}_${Date.now()}.png`;
+
       const { error: uploadErr } = await supabase.storage
-        .from('company-logos').upload(fileName, byteArray, { contentType: 'image/png', upsert: true });
+        .from('company-logos')
+        .upload(fileName, blob, {
+          contentType: 'image/png',
+          upsert: false, // No sobreescribir — cada firma es única
+        });
       if (uploadErr) throw uploadErr;
 
       const { data: urlData } = supabase.storage.from('company-logos').getPublicUrl(fileName);
@@ -231,7 +269,7 @@ export const ContractSign: React.FC<{ token: string }> = ({ token }) => {
       }).eq('id', contract.id);
       if (updateErr) throw updateErr;
 
-      // Generar y abrir PDF para imprimir/guardar
+      // Generar y abrir PDF
       const html = generateContractHTML({ ...contract, client_signature_url: sigUrl }, sigDataUrl);
       const win = window.open('', '_blank');
       if (win) {
@@ -295,7 +333,6 @@ export const ContractSign: React.FC<{ token: string }> = ({ token }) => {
     <div style={{ minHeight: '100vh', background: '#0f172a', padding: '24px 16px', fontFamily: 'Arial, sans-serif' }}>
       <div style={{ maxWidth: 700, margin: '0 auto' }}>
 
-        {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <img src="https://wdaabpbpxbbfhurvjvwj.supabase.co/storage/v1/object/public/company-logos/logo.png"
             alt="POSmaster" style={{ height: 60, marginBottom: 16 }} />
@@ -303,7 +340,6 @@ export const ContractSign: React.FC<{ token: string }> = ({ token }) => {
           <p style={{ color: '#94a3b8', fontSize: 14, marginTop: 4 }}>Por favor lee el contrato y firma al final para activar tu licencia</p>
         </div>
 
-        {/* Datos del cliente */}
         <div style={{ background: '#1e293b', borderRadius: 12, padding: 24, marginBottom: 20, border: '1px solid #334155' }}>
           <h3 style={{ color: '#60a5fa', fontWeight: 700, marginBottom: 16, fontSize: 15 }}>📋 Datos del contrato</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -323,7 +359,6 @@ export const ContractSign: React.FC<{ token: string }> = ({ token }) => {
           </div>
         </div>
 
-        {/* Resumen del contrato */}
         <div style={{ background: '#1e293b', borderRadius: 12, padding: 24, marginBottom: 20, border: '1px solid #334155', maxHeight: 320, overflowY: 'auto' }}>
           <h3 style={{ color: '#60a5fa', fontWeight: 700, marginBottom: 16, fontSize: 15 }}>📄 Términos de la licencia</h3>
           {[
@@ -341,7 +376,6 @@ export const ContractSign: React.FC<{ token: string }> = ({ token }) => {
           ))}
         </div>
 
-        {/* Firma del licenciante */}
         <div style={{ background: '#1e293b', borderRadius: 12, padding: 24, marginBottom: 20, border: '1px solid #334155' }}>
           <h3 style={{ color: '#60a5fa', fontWeight: 700, marginBottom: 16, fontSize: 15 }}>✍️ Firma del Licenciante</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
@@ -355,7 +389,6 @@ export const ContractSign: React.FC<{ token: string }> = ({ token }) => {
           </div>
         </div>
 
-        {/* Canvas firma cliente */}
         <div style={{ background: '#1e293b', borderRadius: 12, padding: 24, marginBottom: 20, border: '1px solid #334155' }}>
           <h3 style={{ color: '#60a5fa', fontWeight: 700, marginBottom: 8, fontSize: 15 }}>✍️ Tu firma</h3>
           <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 16 }}>Firma dentro del recuadro con el dedo (celular) o el mouse (computador)</p>
@@ -377,7 +410,6 @@ export const ContractSign: React.FC<{ token: string }> = ({ token }) => {
           </button>
         </div>
 
-        {/* Aceptación y botón */}
         <div style={{ background: '#1e293b', borderRadius: 12, padding: 24, border: '1px solid #334155' }}>
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer', marginBottom: 24 }}>
             <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)}
@@ -391,7 +423,8 @@ export const ContractSign: React.FC<{ token: string }> = ({ token }) => {
             onClick={handleSign}
             disabled={!hasSig || !agreed || submitting}
             style={{
-              width: '100%', padding: '16px', borderRadius: 12, border: 'none', cursor: !hasSig || !agreed || submitting ? 'not-allowed' : 'pointer',
+              width: '100%', padding: '16px', borderRadius: 12, border: 'none',
+              cursor: !hasSig || !agreed || submitting ? 'not-allowed' : 'pointer',
               background: !hasSig || !agreed || submitting ? '#334155' : 'linear-gradient(135deg, #2563eb, #7c3aed)',
               color: !hasSig || !agreed || submitting ? '#64748b' : '#fff',
               fontWeight: 800, fontSize: 16, transition: 'all 0.2s',
@@ -411,7 +444,6 @@ export const ContractSign: React.FC<{ token: string }> = ({ token }) => {
           © POSmaster — Diego Fernando Valdés Rangel. Todos los derechos reservados.
         </p>
       </div>
-
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );

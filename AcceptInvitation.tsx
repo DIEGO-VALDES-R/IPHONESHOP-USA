@@ -18,6 +18,14 @@ const AcceptInvitation: React.FC<Props> = ({ token }) => {
   useEffect(() => { loadInvitation(); }, [token]);
 
   const loadInvitation = async () => {
+    // ── CORRECCIÓN AUTH-03 — Validar token con más seguridad ──
+    // 1. Token debe tener exactamente 32 chars hex
+    if (!/^[a-f0-9]{32}$/.test(token)) {
+      setErrorMsg('Token de invitación inválido.');
+      setStep('error');
+      return;
+    }
+
     const { data: inv, error } = await supabase
       .from('user_invitations')
       .select('*, companies(name, logo_url)')
@@ -25,8 +33,29 @@ const AcceptInvitation: React.FC<Props> = ({ token }) => {
       .maybeSingle();
 
     if (error || !inv) { setErrorMsg('Invitación no encontrada.'); setStep('error'); return; }
-    if (inv.status === 'ACCEPTED') { setErrorMsg('Esta invitación ya fue utilizada.'); setStep('error'); return; }
-    if (new Date(inv.expires_at) < new Date()) { setErrorMsg('Esta invitación ha expirado. Pide una nueva al administrador.'); setStep('error'); return; }
+
+    // 2. Verificar estado — ACCEPTED o EXPIRED invalidan el token
+    if (inv.status === 'ACCEPTED') {
+      setErrorMsg('Esta invitación ya fue utilizada. Si necesitas acceso, pide una nueva al administrador.');
+      setStep('error');
+      return;
+    }
+    if (inv.status === 'EXPIRED') {
+      setErrorMsg('Esta invitación ha expirado. Pide una nueva al administrador.');
+      setStep('error');
+      return;
+    }
+
+    // 3. Verificar fecha de expiración
+    if (new Date(inv.expires_at) < new Date()) {
+      // Marcar como EXPIRED en BD para que no quede en limbo
+      await supabase.from('user_invitations')
+        .update({ status: 'EXPIRED' })
+        .eq('id', inv.id);
+      setErrorMsg('Esta invitación ha expirado. Pide una nueva al administrador.');
+      setStep('error');
+      return;
+    }
 
     setInvitation(inv);
     setCompany(inv.companies);
@@ -51,6 +80,14 @@ const AcceptInvitation: React.FC<Props> = ({ token }) => {
       if (authError) throw authError;
       if (!authData.user) throw new Error('No se pudo crear el usuario');
 
+      // ── CORRECCIÓN AUTH-03 — Verificar que el email registrado
+      //    coincide exactamente con el email de la invitación ──
+      if (authData.user.email?.toLowerCase() !== invitation.email.toLowerCase()) {
+        // Eliminar el usuario recién creado si el email no coincide
+        await supabase.auth.admin?.deleteUser?.(authData.user.id);
+        throw new Error('El email no coincide con el de la invitación.');
+      }
+
       // 2. Crear perfil con rol y permisos de la invitación
       const { error: profileError } = await supabase.from('profiles').upsert({
         id: authData.user.id,
@@ -67,9 +104,13 @@ const AcceptInvitation: React.FC<Props> = ({ token }) => {
 
       if (profileError) throw profileError;
 
-      // 3. Marcar invitación como ACCEPTED
+      // ── CORRECCIÓN AUTH-03 — Invalidar token completamente tras uso ──
+      // Marcar como ACCEPTED Y limpiar el token para que no sea reutilizable
       await supabase.from('user_invitations')
-        .update({ status: 'ACCEPTED' })
+        .update({
+          status: 'ACCEPTED',
+          token: `used_${invitation.id}`, // Invalida el token original
+        })
         .eq('id', invitation.id);
 
       setStep('success');
@@ -159,9 +200,9 @@ const AcceptInvitation: React.FC<Props> = ({ token }) => {
           <span style={{ color: '#c7d2fe', fontWeight: 700, fontSize: 14 }}>👤 {roleLabel}</span>
         </div>
 
-        {/* Email (readonly) */}
+        {/* Email (readonly) — no se puede cambiar, debe coincidir con la invitación */}
         <div style={styles.field}>
-          <label style={styles.label}>Email</label>
+          <label style={styles.label}>Email (no modificable)</label>
           <input value={invitation.email} readOnly
             style={{ ...styles.input, opacity: 0.6, cursor: 'not-allowed' }} />
         </div>
