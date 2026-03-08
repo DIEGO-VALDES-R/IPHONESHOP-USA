@@ -38,6 +38,15 @@ const COLOR_PRESETS = [
   { label: 'Negro',   primary: '#0f172a', secondary: '#1e293b' },
 ];
 
+const FONT_PRESETS = [
+  { label: 'Blanco',       color: '#ffffff' },
+  { label: 'Gris claro',   color: '#e2e8f0' },
+  { label: 'Gris azulado', color: '#94a3b8' },
+  { label: 'Negro',        color: '#0f172a' },
+  { label: 'Amarillo',     color: '#fde68a' },
+  { label: 'Cian',         color: '#67e8f9' },
+];
+
 const MASTER_KEY = 'admin123';
 
 const Settings: React.FC = () => {
@@ -77,6 +86,9 @@ const Settings: React.FC = () => {
   );
   const [secondaryColor, setSecondaryColor] = useState(
     safeCompany.secondary_color || (safeCompany.config as any)?.secondary_color || '#6366f1'
+  );
+  const [fontColor, setFontColor] = useState(
+    (safeCompany.config as any)?.font_color || '#ffffff'
   );
   const [businessType, setBusinessType] = useState(
     safeCompany.business_type || (safeCompany.config as any)?.business_type || 'general'
@@ -161,6 +173,7 @@ const Settings: React.FC = () => {
         ...currentConfig,
         primary_color: primaryColor,
         secondary_color: secondaryColor,
+        font_color: fontColor,
         business_type: businessType,
       };
       const { error } = await supabase.from('companies')
@@ -351,13 +364,37 @@ const Settings: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-3">Color de marca</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-3">Color de marca <span className="text-slate-400 font-normal text-xs">(color del menú lateral)</span></label>
                 <div className="flex flex-wrap gap-3">
                   {COLOR_PRESETS.map(preset => (
-                    <button key={preset.label} type="button" onClick={() => { setPrimaryColor(preset.primary); setSecondaryColor(preset.secondary); }}
+                    <button key={preset.label} type="button" title={preset.label}
+                      onClick={() => { setPrimaryColor(preset.primary); setSecondaryColor(preset.secondary); }}
                       className={`w-10 h-10 rounded-full border-4 transition-all ${primaryColor === preset.primary ? 'border-slate-800 scale-110 shadow-lg' : 'border-transparent hover:scale-105'}`}
                       style={{ background: `linear-gradient(135deg, ${preset.primary}, ${preset.secondary})` }} />
                   ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-3">Color de fuentes <span className="text-slate-400 font-normal text-xs">(textos del menú lateral)</span></label>
+                <div className="flex flex-wrap gap-3 items-center">
+                  {FONT_PRESETS.map(fp => (
+                    <button key={fp.label} type="button" title={fp.label}
+                      onClick={() => setFontColor(fp.color)}
+                      className={`w-10 h-10 rounded-full border-4 transition-all flex items-center justify-center text-xs font-bold ${fontColor === fp.color ? 'border-slate-800 scale-110 shadow-lg' : 'border-transparent hover:scale-105'}`}
+                      style={{ background: fp.color === '#ffffff' ? '#e2e8f0' : fp.color === '#0f172a' ? '#0f172a' : fp.color, color: fp.color === '#ffffff' || fp.color === '#e2e8f0' ? '#0f172a' : '#fff' }}>
+                      A
+                    </button>
+                  ))}
+                  <div className="flex items-center gap-2 ml-2">
+                    <label className="text-xs text-slate-500">Personalizado:</label>
+                    <input type="color" value={fontColor} onChange={e => setFontColor(e.target.value)}
+                      className="w-10 h-10 rounded-lg border border-slate-200 cursor-pointer p-0.5" />
+                  </div>
+                </div>
+                <div className="mt-3 p-3 rounded-lg flex items-center gap-3" style={{ background: primaryColor }}>
+                  <span className="text-sm font-medium" style={{ color: fontColor }}>📦 Vista previa del menú</span>
+                  <span className="text-xs opacity-70" style={{ color: fontColor }}>← así se verán los textos</span>
                 </div>
               </div>
 

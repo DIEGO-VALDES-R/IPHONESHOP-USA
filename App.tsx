@@ -13,6 +13,8 @@ import InvoiceHistory from './pages/InvoiceHistory';
 import Settings from './pages/Settings';
 import Branches from './pages/Branches';
 import Team from './pages/Team';
+import Tables from './pages/Tables';
+import KitchenDisplay from './pages/KitchenDisplay';
 import { LandingPage, RegisterPage, AdminPanel } from './LandingPage';
 import { ContractSign } from './ContractSign';
 import AcceptInvitation from './AcceptInvitation';
@@ -308,6 +310,8 @@ const AppRoutes: React.FC = () => (
     <Route path="/settings"     element={<Settings />} />
     <Route path="/branches"     element={<Branches />} />
     <Route path="/team"         element={<Team />} />
+    <Route path="/tables"       element={<Tables />} />
+    <Route path="/kitchen"      element={<KitchenDisplay />} />
   </Routes>
 );
 

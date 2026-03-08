@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, Package, Wrench,
   Settings, LogOut, Menu, Building2, User,
-  Landmark, FileText, Globe, Receipt, ShieldCheck, Users
+  Landmark, FileText, Globe, Receipt, ShieldCheck, Users, Utensils
 } from 'lucide-react';
 import { useCurrency, CurrencyCode } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
@@ -31,8 +31,9 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
     { label: 'Inventario',         path: '/inventory',    icon: Package,         show: hasPermission('can_manage_inventory') || isAdminOrMaster },
     { label: 'Historial Facturas', path: '/invoices',     icon: Receipt,         show: hasPermission('can_view_reports') || isAdminOrMaster },
     { label: 'Servicio Técnico',   path: '/repairs',      icon: Wrench,          show: hasPermission('can_view_repairs') || isAdminOrMaster },
-    { label: 'Cartera / CxC',      path: '/receivables',  icon: FileText,        show: hasPermission('can_view_reports') || isAdminOrMaster },
-    { label: 'Sucursales',         path: '/branches',     icon: Building2,       show: isPro && isAdminOrMaster },
+    { label: 'Cartera / CxC',      path: '/receivables',  icon: FileText,    show: hasPermission('can_view_reports') || isAdminOrMaster },
+    { label: 'Mesas / Restaurante', path: '/tables',       icon: Utensils,    show: isAdminOrMaster },
+    { label: 'Sucursales',          path: '/branches',     icon: Building2,   show: isPro && isAdminOrMaster },
     { label: 'Equipo',             path: '/team',         icon: Users,           show: isPro && (hasPermission('can_manage_team') || isAdminOrMaster) },
     { label: 'Configuración',      path: '/settings',     icon: Settings,        show: isAdminOrMaster },
   ].filter(item => item.show);
