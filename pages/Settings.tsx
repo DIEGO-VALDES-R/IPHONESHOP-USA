@@ -102,17 +102,16 @@ const Settings: React.FC = () => {
   );
   const toggleBusinessType = (id: string) => {
     setBusinessTypes(prev => {
+      // Si ya está seleccionado, deseleccionar (pero nunca dejar vacío)
       if (prev.includes(id)) {
-        // No dejar vacío
         if (prev.length === 1) return prev;
         return prev.filter(t => t !== id);
       }
+      // BASIC: swap directo — reemplaza el único seleccionado
+      if (plan === 'BASIC') return [id];
+      // PRO: hasta 3
       if (prev.length >= maxBusinessTypes) {
-        toast.error(
-          plan === 'BASIC'
-            ? 'El plan BASIC solo permite 1 tipo de negocio. Actualiza a PRO para seleccionar hasta 3.'
-            : `El plan PRO permite hasta 3 tipos. Actualiza a ENTERPRISE para tener todos.`
-        );
+        toast.error('El plan PRO permite hasta 3 tipos. Actualiza a ENTERPRISE para tener todos.');
         return prev;
       }
       return [...prev, id];
@@ -406,7 +405,7 @@ const Settings: React.FC = () => {
                 </div>
                 {plan === 'BASIC' && (
                   <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
-                    ⚠️ Plan BASIC: solo puedes tener <strong>1 tipo de negocio</strong>. Actualiza a <strong>PRO</strong> para hasta 3, o <strong>ENTERPRISE</strong> para todos.
+                    ⚠️ Plan BASIC: solo puedes tener <strong>1 tipo de negocio</strong>. Al seleccionar uno nuevo el anterior se reemplaza automáticamente. Actualiza a <strong>PRO</strong> para hasta 3, o <strong>ENTERPRISE</strong> para todos.
                   </p>
                 )}
                 {plan === 'PRO' && (
@@ -417,7 +416,8 @@ const Settings: React.FC = () => {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   {BUSINESS_TYPES.map(bt => {
                     const isSelected = businessTypes.includes(bt.id);
-                    const isLocked   = !isSelected && businessTypes.length >= maxBusinessTypes;
+                    // Solo bloquear en PRO cuando ya tiene 3 y este no está seleccionado
+                    const isLocked = plan === 'PRO' && !isSelected && businessTypes.length >= maxBusinessTypes;
                     return (
                       <button key={bt.id} type="button" onClick={() => toggleBusinessType(bt.id)}
                         disabled={isLocked}
