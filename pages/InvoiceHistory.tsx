@@ -3,11 +3,12 @@ import {
   Search, FileText, Eye, X, ChevronDown, ChevronUp,
   User, Calendar, Hash, DollarSign, AlertCircle,
   CheckCircle, Clock, XCircle, Printer, MessageCircle,
-  Mail, QrCode, AlertTriangle, Package
+  Mail, QrCode, AlertTriangle, Package, Zap
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
+import BotonFacturaDian from '../components/BotonFacturaDian';
 
 interface InvoiceItem {
   id: string;
@@ -56,11 +57,13 @@ interface InvoiceDetailModalProps {
   company: any;
   onClose: () => void;
   formatMoney: (n: number) => string;
+  onDianSuccess: (invoiceId: string) => void;
 }
 
-const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, company, onClose, formatMoney }) => {
+const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, company, onClose, formatMoney, onDianSuccess }) => {
   const companyName = company?.name ?? 'IPHONESHOP USA';
   const showIva = (invoice.tax_amount ?? 0) > 0;
+  const dianEnabled = company?.dian_settings?.is_active || false;
 
   const handlePrint = () => setTimeout(() => window.print(), 200);
 
@@ -167,6 +170,16 @@ const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, compan
             </div>
           )}
 
+          {/* ── BOTÓN DIAN dentro del modal ── */}
+          {dianEnabled && invoice.status === 'PENDING_ELECTRONIC' && (
+            <div className="mt-4 print:hidden">
+              <BotonFacturaDian
+                invoiceId={invoice.id}
+                tipoVenta="electronica"
+              />
+            </div>
+          )}
+
           <div className="mt-6 pt-4 border-t border-slate-300 text-[9px] text-slate-500 leading-tight space-y-2">
             <p className="font-bold uppercase text-slate-700 text-[10px] text-center tracking-wide">Terminos y Condiciones de Garantia</p>
             <p>- Pantallas y vidrios no tienen cobertura de garantia</p>
@@ -208,6 +221,8 @@ const InvoiceHistory: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 20;
+
+  const dianEnabled = (company as any)?.dian_settings?.is_active || false;
 
   const enrichInvoice = (inv: any): Invoice => {
     const pm = inv.payment_method || {};
@@ -264,8 +279,15 @@ const InvoiceHistory: React.FC = () => {
 
   const handleSearch = () => loadInvoices(true);
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter') handleSearch(); };
-
   useEffect(() => { if (page > 0) loadInvoices(false); }, [page]);
+
+  // Cuando DIAN confirma éxito, actualizar status en lista sin recargar todo
+  const handleDianSuccess = (invoiceId: string) => {
+    setInvoices(prev => prev.map(inv =>
+      inv.id === invoiceId ? { ...inv, status: 'ACCEPTED' } : inv
+    ));
+    setSelectedInvoice(null);
+  };
 
   const hasMore = invoices.length < total;
   const totalShown = invoices.reduce((s, inv) => s + inv.total_amount, 0);
@@ -348,14 +370,15 @@ const InvoiceHistory: React.FC = () => {
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  {['Factura','Fecha','Cliente','Cedula/NIT','Total','Estado',''].map(h => (
-                    <th key={h} className="px-4 py-3 font-semibold text-slate-600 text-xs uppercase tracking-wide">{h}</th>
+                  {['Factura','Fecha','Cliente','Cedula/NIT','Total','Estado', dianEnabled ? 'DIAN' : '', ''].map((h, i) => (
+                    <th key={i} className="px-4 py-3 font-semibold text-slate-600 text-xs uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {invoices.map(inv => {
                   const isExpanded = expandedId === inv.id;
+                  const isPending = inv.status === 'PENDING_ELECTRONIC';
                   return (
                     <React.Fragment key={inv.id}>
                       <tr className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : inv.id)}>
@@ -375,6 +398,25 @@ const InvoiceHistory: React.FC = () => {
                         </td>
                         <td className="px-4 py-3 font-bold text-slate-800">{formatMoney(inv.total_amount)}</td>
                         <td className="px-4 py-3"><StatusBadge status={inv.status} /></td>
+
+                        {/* ── COLUMNA DIAN ── solo visible si DIAN habilitado */}
+                        {dianEnabled && (
+                          <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                            {isPending ? (
+                              <button
+                                onClick={() => setSelectedInvoice(inv)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-colors shadow-sm"
+                                title="Enviar a DIAN">
+                                <Zap size={12} /> Facturar
+                              </button>
+                            ) : inv.status === 'ACCEPTED' ? (
+                              <span className="flex items-center gap-1 text-emerald-600 text-xs font-bold">
+                                <CheckCircle size={13} /> OK
+                              </span>
+                            ) : null}
+                          </td>
+                        )}
+
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <button onClick={e => { e.stopPropagation(); setSelectedInvoice(inv); }}
@@ -388,7 +430,7 @@ const InvoiceHistory: React.FC = () => {
 
                       {isExpanded && (
                         <tr className="bg-blue-50/40">
-                          <td colSpan={7} className="px-6 py-4">
+                          <td colSpan={dianEnabled ? 8 : 7} className="px-6 py-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div>
                                 <p className="text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1"><Package size={12} /> Productos</p>
@@ -448,7 +490,13 @@ const InvoiceHistory: React.FC = () => {
       </div>
 
       {selectedInvoice && (
-        <InvoiceDetailModal invoice={selectedInvoice} company={company} onClose={() => setSelectedInvoice(null)} formatMoney={formatMoney} />
+        <InvoiceDetailModal
+          invoice={selectedInvoice}
+          company={company}
+          onClose={() => setSelectedInvoice(null)}
+          formatMoney={formatMoney}
+          onDianSuccess={handleDianSuccess}
+        />
       )}
     </div>
   );
