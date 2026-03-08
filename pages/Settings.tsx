@@ -10,9 +10,9 @@ import { supabase } from '../supabaseClient';
 import { DianEnvironment, DianSettings } from '../types';
 
 const PLANS = [
-  { id: 'BASIC', name: 'Plan Basico', price: 'Gratis', features: ['1 Usuario', '1 Sucursal', 'POS Basico', 'Hasta 100 Productos'], color: 'border-slate-200' },
-  { id: 'PRO', name: 'Plan Profesional', price: '$29.99 / mes', features: ['5 Usuarios', '3 Sucursales', 'Facturacion Electronica', 'Reportes Avanzados', 'Soporte Prioritario'], color: 'border-blue-500 ring-2 ring-blue-500/20' },
-  { id: 'ENTERPRISE', name: 'Plan Enterprise', price: '$99.99 / mes', features: ['Usuarios Ilimitados', 'Sucursales Ilimitadas', 'API Access', 'Gestor Dedicado', 'SLA 99.9%'], color: 'border-purple-200' }
+  { id: 'BASIC', name: 'Plan Basic', price: '$65.000 / mes', features: ['1 sucursal', '1 usuario admin', 'POS y ventas', 'Inventario ilimitado', 'Control de caja', 'Servicio técnico', 'Cartera / CxC', 'Soporte WhatsApp'], color: 'border-slate-200', accentClass: 'bg-slate-600' },
+  { id: 'PRO', name: 'Plan Pro', price: '$120.000 / mes', features: ['Hasta 3 sucursales', 'Hasta 5 usuarios', 'Todo lo del Basic', 'Roles y permisos', 'PIN de acceso rápido', 'Dashboard multi-sucursal', 'Soporte Prioritario'], color: 'border-blue-500 ring-2 ring-blue-500/20', accentClass: 'bg-blue-600', popular: true },
+  { id: 'ENTERPRISE', name: 'Plan Enterprise', price: '$249.900 / mes', features: ['Sucursales ilimitadas', 'Usuarios ilimitados', 'Todo lo del Pro', 'Facturación DIAN', 'API + Webhooks', 'Gerente de cuenta dedicado', 'SLA 99.9% uptime', 'Soporte Dedicado'], color: 'border-purple-500 ring-2 ring-purple-500/20', accentClass: 'bg-purple-600', enterprise: true }
 ];
 
 const BUSINESS_TYPES = [
@@ -61,13 +61,30 @@ const Settings: React.FC = () => {
     dian_settings: null
   };
 
+  const plan = safeCompany.subscription_plan || 'BASIC';
+  const ALLOWED_PAYMENT_METHODS: Record<string, string[]> = {
+    BASIC:      ['cash', 'transfer'],
+    PRO:        ['cash', 'transfer', 'wompi'],
+    ENTERPRISE: ['cash', 'transfer', 'wompi', 'bold', 'payu', 'dataphone'],
+  };
+  const allowedMethods = ALLOWED_PAYMENT_METHODS[plan] || ALLOWED_PAYMENT_METHODS['BASIC'];
+
   const [formData, setFormData] = useState(safeCompany);
-  const [activeTab, setActiveTab] = useState<'GENERAL' | 'DIAN' | 'BRANDING'>('GENERAL');
+  const [activeTab, setActiveTab] = useState<'GENERAL' | 'DIAN' | 'BRANDING' | 'PAGOS'>('GENERAL');
   const [taxRate, setTaxRate] = useState<number>(safeCompany.config?.tax_rate ?? 0);
   const [primaryColor, setPrimaryColor] = useState(safeCompany.primary_color || '#3b82f6');
   const [secondaryColor, setSecondaryColor] = useState(safeCompany.secondary_color || '#6366f1');
   const [businessType, setBusinessType] = useState(safeCompany.business_type || 'general');
   const [savingBranding, setSavingBranding] = useState(false);
+  const [paymentProviders, setPaymentProviders] = useState<Record<string, any>>({
+    cash:      { enabled: true,  label: 'Efectivo',             icon: '💵' },
+    dataphone: { enabled: false, label: 'Datáfono físico',      icon: '📟', acquirer: 'redeban', note: '' },
+    transfer:  { enabled: false, label: 'Transferencia / PSE',  icon: '🏛️', bank_name: '', account_number: '', account_type: 'ahorros', id_type: 'NIT', id_number: '' },
+    wompi:     { enabled: false, label: 'Wompi',                icon: '🏦', pub_key: '', env: 'prod' },
+    bold:      { enabled: false, label: 'Bold',                 icon: '⚡', api_key: '' },
+    payu:      { enabled: false, label: 'PayU',                 icon: '💳', merchant_id: '', api_key: '', api_login: '' },
+  });
+  const [savingPayments, setSavingPayments] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const [dianForm, setDianForm] = useState<DianSettings>(safeCompany.dian_settings || {
@@ -147,6 +164,21 @@ const Settings: React.FC = () => {
     }
   };
 
+  const handleSavePayments = async () => {
+    setSavingPayments(true);
+    try {
+      const { error } = await supabase.from('business_settings')
+        .update({ payment_providers: paymentProviders })
+        .eq('id', safeCompany.id);
+      if (error) throw error;
+      toast.success('Métodos de pago guardados');
+    } catch (err: any) {
+      toast.error('Error: ' + err.message);
+    } finally {
+      setSavingPayments(false);
+    }
+  };
+
   const handlePlanChange = (planId: string) => {
     updateCompanyConfig({ subscription_plan: planId } as any);
     setIsSubscriptionModalOpen(false);
@@ -208,6 +240,10 @@ const Settings: React.FC = () => {
           <button type="button" onClick={() => setActiveTab('DIAN')}
             className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${activeTab === 'DIAN' ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}>
             <FileCode size={16} /> Facturacion Electronica
+          </button>
+          <button type="button" onClick={() => setActiveTab('PAGOS')}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${activeTab === 'PAGOS' ? 'bg-purple-100 text-purple-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+            <CreditCard size={16} /> Métodos de Pago
           </button>
         </div>
       </div>
@@ -421,6 +457,336 @@ const Settings: React.FC = () => {
             </button>
           )}
         </div>
+
+        {/* TAB PAGOS */}
+        {activeTab === 'PAGOS' && (
+          <div className="md:col-span-3 space-y-5">
+
+            {/* HEADER */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-1">
+                <CreditCard size={20} className="text-purple-600" /> Métodos de pago del negocio
+              </h3>
+              <p className="text-sm text-slate-500">
+                Configura cómo tus clientes pagan en el punto de venta. Activa solo los métodos que usas y completa los datos de <strong>tu propio</strong> cuenta o terminal — el dinero siempre va directo a ti.
+              </p>
+              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex gap-2">
+                <span>🔒</span>
+                <span>Las credenciales se guardan cifradas en tu cuenta. POSmaster <strong>nunca</strong> procesa ni retiene ningún pago — somos solo la pantalla que conecta al cajero con tu pasarela.</span>
+              </div>
+              {plan !== 'ENTERPRISE' && (
+                <div className="mt-3 p-3 rounded-lg border flex items-center justify-between gap-3"
+                  style={{ background: plan === 'PRO' ? '#faf5ff' : '#f0fdf4', borderColor: plan === 'PRO' ? '#d8b4fe' : '#86efac' }}>
+                  <div className="text-xs" style={{ color: plan === 'PRO' ? '#7c3aed' : '#15803d' }}>
+                    {plan === 'PRO'
+                      ? <><strong>Plan Pro:</strong> tienes Efectivo, Transferencia y Wompi. Actualiza a <strong>Enterprise</strong> para Bold, PayU y Datáfono físico.</>
+                      : <><strong>Plan Basic:</strong> tienes Efectivo y Transferencia. Actualiza a <strong>Pro</strong> para Wompi o <strong>Enterprise</strong> para todos los métodos.</>
+                    }
+                  </div>
+                  <button onClick={() => setIsSecurityCheckOpen(true)}
+                    className="whitespace-nowrap text-xs font-bold px-3 py-1.5 rounded-lg text-white"
+                    style={{ background: plan === 'PRO' ? '#8b5cf6' : '#16a34a' }}>
+                    Ver planes
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {allowedMethods.includes('cash') && (
+              <div className={`bg-white p-5 rounded-xl shadow-sm border-2 ${paymentProviders.cash.enabled ? 'border-green-400' : 'border-slate-200'}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">💵</span>
+                    <div>
+                      <p className="font-bold text-slate-800">Efectivo</p>
+                      <p className="text-xs text-slate-500">Sin integración externa — el cajero registra manualmente el monto recibido y el cambio.</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={paymentProviders.cash.enabled}
+                      onChange={e => setPaymentProviders(p => ({ ...p, cash: { ...p.cash, enabled: e.target.checked } }))} />
+                    <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                  </label>
+                </div>
+                {paymentProviders.cash.enabled && (
+                  <div className="mt-3 p-3 bg-green-50 border border-green-100 rounded-lg text-xs text-green-700">
+                    ✅ El POS mostrará campo de monto recibido y calculará el cambio automáticamente.
+                  </div>
+                )}
+              </div>
+
+
+            )}
+            {allowedMethods.includes('dataphone') && (
+              <div className={`bg-white p-5 rounded-xl shadow-sm border-2 ${paymentProviders.dataphone.enabled ? 'border-blue-400' : 'border-slate-200'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">📟</span>
+                    <div>
+                      <p className="font-bold text-slate-800">Datáfono físico</p>
+                      <p className="text-xs text-slate-500">Terminal propio con Redeban, Credibanco o Getnet. El cobro lo procesa tu banco — el POS solo guía al cajero.</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={paymentProviders.dataphone.enabled}
+                      onChange={e => setPaymentProviders(p => ({ ...p, dataphone: { ...p.dataphone, enabled: e.target.checked } }))} />
+                    <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                  </label>
+                </div>
+                {paymentProviders.dataphone.enabled && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Adquirente / Red</label>
+                        <select value={paymentProviders.dataphone.acquirer}
+                          onChange={e => setPaymentProviders(p => ({ ...p, dataphone: { ...p.dataphone, acquirer: e.target.value } }))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-400 outline-none">
+                          <option value="redeban">Redeban Multicolor</option>
+                          <option value="credibanco">Credibanco</option>
+                          <option value="getnet">Getnet (Bancolombia)</option>
+                          <option value="nequi">Nequi datafono</option>
+                          <option value="otro">Otro</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Nota para el cajero (opcional)</label>
+                        <input type="text" placeholder="Ej: Terminal caja 1, Visa/MC/Amex" value={paymentProviders.dataphone.note}
+                          onChange={e => setPaymentProviders(p => ({ ...p, dataphone: { ...p.dataphone, note: e.target.value } }))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 outline-none" />
+                      </div>
+                    </div>
+                    <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700">
+                      ℹ️ El POS mostrará al cajero: <em>"Cobrar ${'{total}'} en datáfono {paymentProviders.dataphone.acquirer} y confirmar"</em>. No hay integración automática — el aprobado lo verifica el cajero en el terminal.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+
+            )}
+            {allowedMethods.includes('transfer') && (
+              <div className={`bg-white p-5 rounded-xl shadow-sm border-2 ${paymentProviders.transfer.enabled ? 'border-indigo-400' : 'border-slate-200'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🏛️</span>
+                    <div>
+                      <p className="font-bold text-slate-800">Transferencia bancaria / PSE</p>
+                      <p className="text-xs text-slate-500">El POS muestra tus datos bancarios al cliente para que transfiera. Tú verificas el recibo.</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={paymentProviders.transfer.enabled}
+                      onChange={e => setPaymentProviders(p => ({ ...p, transfer: { ...p.transfer, enabled: e.target.checked } }))} />
+                    <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500"></div>
+                  </label>
+                </div>
+                {paymentProviders.transfer.enabled && (
+                  <div className="mt-3 pt-3 border-t border-slate-100">
+                    <p className="text-xs font-semibold text-slate-500 mb-3">Datos bancarios que verá el cliente en pantalla y en el recibo:</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Banco</label>
+                        <input type="text" placeholder="Ej: Bancolombia" value={paymentProviders.transfer.bank_name}
+                          onChange={e => setPaymentProviders(p => ({ ...p, transfer: { ...p.transfer, bank_name: e.target.value } }))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Tipo de cuenta</label>
+                        <select value={paymentProviders.transfer.account_type}
+                          onChange={e => setPaymentProviders(p => ({ ...p, transfer: { ...p.transfer, account_type: e.target.value } }))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-400 outline-none">
+                          <option value="ahorros">Ahorros</option>
+                          <option value="corriente">Corriente</option>
+                          <option value="nequi">Nequi</option>
+                          <option value="daviplata">Daviplata</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Número de cuenta / celular</label>
+                        <input type="text" placeholder="Ej: 0123456789" value={paymentProviders.transfer.account_number}
+                          onChange={e => setPaymentProviders(p => ({ ...p, transfer: { ...p.transfer, account_number: e.target.value } }))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Tipo ID titular</label>
+                        <select value={paymentProviders.transfer.id_type}
+                          onChange={e => setPaymentProviders(p => ({ ...p, transfer: { ...p.transfer, id_type: e.target.value } }))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-400 outline-none">
+                          <option value="NIT">NIT</option>
+                          <option value="CC">Cédula (CC)</option>
+                        </select>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Número de identificación del titular</label>
+                        <input type="text" placeholder="Ej: 900123456-7" value={paymentProviders.transfer.id_number}
+                          onChange={e => setPaymentProviders(p => ({ ...p, transfer: { ...p.transfer, id_number: e.target.value } }))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none" />
+                      </div>
+                    </div>
+                    <div className="mt-3 p-3 bg-indigo-50 border border-indigo-100 rounded-lg text-xs text-indigo-700">
+                      ℹ️ El cajero podrá marcar la venta como <strong>"pendiente de verificación"</strong> hasta confirmar que el dinero llegó a tu cuenta.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+
+            )}
+            {allowedMethods.includes('wompi') && (
+              <div className={`bg-white p-5 rounded-xl shadow-sm border-2 ${paymentProviders.wompi.enabled ? 'border-emerald-400' : 'border-slate-200'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🏦</span>
+                    <div>
+                      <p className="font-bold text-slate-800">Wompi <span className="text-xs font-normal text-slate-400">(de Bancolombia)</span></p>
+                      <p className="text-xs text-slate-500">El POS genera un link de pago Wompi <strong>de tu cuenta</strong>. El dinero va a tu cuenta Bancolombia.</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={paymentProviders.wompi.enabled}
+                      onChange={e => setPaymentProviders(p => ({ ...p, wompi: { ...p.wompi, enabled: e.target.checked } }))} />
+                    <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                  </label>
+                </div>
+                {paymentProviders.wompi.enabled && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Llave pública de tu cuenta Wompi</label>
+                        <input type="text" placeholder="pub_prod_XXXXXXXX o pub_stagtest_XXXXXXXX"
+                          value={paymentProviders.wompi.pub_key}
+                          onChange={e => setPaymentProviders(p => ({ ...p, wompi: { ...p.wompi, pub_key: e.target.value } }))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-400 outline-none font-mono" />
+                        <p className="text-xs text-slate-400 mt-1">Solo la llave pública — nunca la privada. Se usa solo para crear el link de pago.</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Ambiente</label>
+                        <select value={paymentProviders.wompi.env}
+                          onChange={e => setPaymentProviders(p => ({ ...p, wompi: { ...p.wompi, env: e.target.value } }))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-emerald-400 outline-none">
+                          <option value="prod">Producción (real)</option>
+                          <option value="sandbox">Sandbox (pruebas)</option>
+                        </select>
+                      </div>
+                      <div className="flex items-end">
+                        <a href="https://comercios.wompi.co" target="_blank" rel="noopener noreferrer"
+                          className="text-xs text-emerald-600 hover:underline">🔗 Crear / ver mi cuenta Wompi</a>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg text-xs text-emerald-800">
+                      ✅ Al cobrar, el POS abrirá el checkout de Wompi con el monto exacto. El cliente paga con tarjeta o PSE y el dinero llega a tu cuenta Bancolombia. POSmaster no toca el pago.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+
+            )}
+            {allowedMethods.includes('bold') && (
+              <div className={`bg-white p-5 rounded-xl shadow-sm border-2 ${paymentProviders.bold.enabled ? 'border-yellow-400' : 'border-slate-200'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">⚡</span>
+                    <div>
+                      <p className="font-bold text-slate-800">Bold</p>
+                      <p className="text-xs text-slate-500">Genera un link de pago Bold <strong>de tu cuenta</strong>. Compatible con terminal físico Bold y link QR. Dinero va a tu cuenta Bold.</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={paymentProviders.bold.enabled}
+                      onChange={e => setPaymentProviders(p => ({ ...p, bold: { ...p.bold, enabled: e.target.checked } }))} />
+                    <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-500"></div>
+                  </label>
+                </div>
+                {paymentProviders.bold.enabled && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">API Key de tu cuenta Bold</label>
+                      <input type="password" placeholder="sk_prod_XXXXXXXX"
+                        value={paymentProviders.bold.api_key}
+                        onChange={e => setPaymentProviders(p => ({ ...p, bold: { ...p.bold, api_key: e.target.value } }))}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 outline-none font-mono" />
+                      <p className="text-xs text-slate-400 mt-1">Encuéntrala en tu Dashboard Bold → Desarrolladores → API Keys.</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <a href="https://bold.co" target="_blank" rel="noopener noreferrer"
+                        className="text-xs text-yellow-600 hover:underline">🔗 Ir a mi cuenta Bold</a>
+                      <a href="https://docs.bold.co" target="_blank" rel="noopener noreferrer"
+                        className="text-xs text-slate-400 hover:underline">📄 Documentación Bold</a>
+                    </div>
+                    <div className="p-3 bg-yellow-50 border border-yellow-100 rounded-lg text-xs text-yellow-800">
+                      ✅ Al cobrar, el POS creará un link de pago Bold por el monto exacto y lo mostrará como QR o enlace. El cliente paga y el dinero llega a tu cuenta Bold. POSmaster no toca el pago.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+
+            )}
+            {allowedMethods.includes('payu') && (
+              <div className={`bg-white p-5 rounded-xl shadow-sm border-2 ${paymentProviders.payu.enabled ? 'border-orange-400' : 'border-slate-200'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">💳</span>
+                    <div>
+                      <p className="font-bold text-slate-800">PayU Latam</p>
+                      <p className="text-xs text-slate-500">Genera un link de pago PayU <strong>de tu cuenta</strong>. Acepta tarjetas, PSE, efectivo (Efecty). Dinero va a tu cuenta PayU.</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={paymentProviders.payu.enabled}
+                      onChange={e => setPaymentProviders(p => ({ ...p, payu: { ...p.payu, enabled: e.target.checked } }))} />
+                    <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                  </label>
+                </div>
+                {paymentProviders.payu.enabled && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Merchant ID</label>
+                        <input type="text" placeholder="Tu Merchant ID" value={paymentProviders.payu.merchant_id}
+                          onChange={e => setPaymentProviders(p => ({ ...p, payu: { ...p.payu, merchant_id: e.target.value } }))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-400 outline-none font-mono" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">API Key</label>
+                        <input type="password" placeholder="API Key PayU" value={paymentProviders.payu.api_key}
+                          onChange={e => setPaymentProviders(p => ({ ...p, payu: { ...p.payu, api_key: e.target.value } }))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-400 outline-none font-mono" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">API Login</label>
+                        <input type="text" placeholder="API Login PayU" value={paymentProviders.payu.api_login}
+                          onChange={e => setPaymentProviders(p => ({ ...p, payu: { ...p.payu, api_login: e.target.value } }))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-400 outline-none font-mono" />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <a href="https://www.payu.com.co" target="_blank" rel="noopener noreferrer"
+                        className="text-xs text-orange-600 hover:underline">🔗 Ir a mi cuenta PayU</a>
+                      <a href="https://developers.payulatam.com" target="_blank" rel="noopener noreferrer"
+                        className="text-xs text-slate-400 hover:underline">📄 Documentación PayU</a>
+                    </div>
+                    <div className="p-3 bg-orange-50 border border-orange-100 rounded-lg text-xs text-orange-800">
+                      ✅ Al cobrar, el POS redirigirá al checkout de PayU con el monto exacto. El cliente paga y el dinero llega a tu cuenta PayU. POSmaster no toca el pago.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+
+            )}
+            {/* BOTÓN GUARDAR */}
+            <div className="flex justify-end pb-2">
+              <button onClick={handleSavePayments} disabled={savingPayments}
+                className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-all shadow-md disabled:opacity-60">
+                {savingPayments ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Save size={18} />}
+                Guardar configuración de pagos
+              </button>
+            </div>
+
+          </div>
+        )}
       </form>
 
       {/* MODAL DE SEGURIDAD (PASSWORD ADMIN) */}
@@ -464,20 +830,32 @@ const Settings: React.FC = () => {
                 {PLANS.map(plan => {
                   const isCurrent = safeCompany.subscription_plan === plan.id;
                   return (
-                    <div key={plan.id} className={`bg-white rounded-xl p-6 border flex flex-col transition-all hover:shadow-lg ${isCurrent ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-lg' : 'border-slate-200'}`}>
+                    <div key={plan.id} className={`bg-white rounded-xl p-6 border flex flex-col transition-all hover:shadow-lg ${isCurrent ? ((plan as any).enterprise ? 'border-purple-500 ring-2 ring-purple-500/20 shadow-lg' : 'border-blue-500 ring-2 ring-blue-500/20 shadow-lg') : (plan as any).enterprise ? 'border-purple-200' : 'border-slate-200'}`}>
+                      {(plan as any).popular && <div className="text-xs font-bold text-blue-600 bg-blue-50 rounded-full px-3 py-1 mb-3 self-start">⭐ Más Popular</div>}
+                      {(plan as any).enterprise && <div className="text-xs font-bold text-purple-600 bg-purple-50 rounded-full px-3 py-1 mb-3 self-start">🏢 Enterprise</div>}
                       <div className="mb-4">
                         <h4 className="font-bold text-lg text-slate-800">{plan.name}</h4>
-                        <div className="text-2xl font-bold text-slate-900 mt-2">{plan.price}</div>
+                        <div className={`text-2xl font-bold mt-2 ${(plan as any).enterprise ? 'text-purple-700' : 'text-slate-900'}`}>{plan.price}</div>
                       </div>
                       <div className="flex-1 space-y-3 mb-6">
                         {plan.features.map((feature, idx) => (
-                          <div key={idx} className="flex items-center gap-2 text-sm text-slate-600"><Check size={16} className="text-green-500 flex-shrink-0" /><span>{feature}</span></div>
+                          <div key={idx} className="flex items-center gap-2 text-sm text-slate-600">
+                            <Check size={16} className={(plan as any).enterprise ? 'text-purple-500 flex-shrink-0' : 'text-green-500 flex-shrink-0'} />
+                            <span>{feature}</span>
+                          </div>
                         ))}
                       </div>
-                      <button disabled={isCurrent} onClick={() => handlePlanChange(plan.id)}
-                        className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${isCurrent ? 'bg-slate-100 text-slate-400 cursor-default' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md active:translate-y-0.5 transition-all'}`}>
-                        {isCurrent ? <><Check size={18} /> Plan Actual</> : <><CreditCard size={18} /> Seleccionar</>}
-                      </button>
+                      {(plan as any).enterprise ? (
+                        <button onClick={() => window.open('https://wa.me/573001234567?text=Hola%2C+quiero+info+del+plan+Enterprise+de+POSmaster', '_blank')}
+                          className="w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-violet-600 text-white hover:from-purple-700 hover:to-violet-700 shadow-md transition-all">
+                          <CreditCard size={18} /> Contactar Ventas
+                        </button>
+                      ) : (
+                        <button disabled={isCurrent} onClick={() => handlePlanChange(plan.id)}
+                          className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${isCurrent ? 'bg-slate-100 text-slate-400 cursor-default' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md active:translate-y-0.5 transition-all'}`}>
+                          {isCurrent ? <><Check size={18} /> Plan Actual</> : <><CreditCard size={18} /> Seleccionar</>}
+                        </button>
+                      )}
                     </div>
                   );
                 })}
