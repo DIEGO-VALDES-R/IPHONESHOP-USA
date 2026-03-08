@@ -41,6 +41,14 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
   const companyName = company?.name ?? 'IPHONESHOP USA';
   const logoUrl = company?.logo_url ?? null;
 
+  // Brand color from Settings > Marca (stored in company.config.primary_color)
+  const brandColor = (company?.config as any)?.primary_color || '#1e293b';
+  const hexToRgb = (hex: string) => {
+    if (!hex || hex.length < 7) return '30,41,59';
+    return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
+  };
+  const brandRgb = brandColor.startsWith('#') ? hexToRgb(brandColor) : '30,41,59';
+
   // Nombre del rol a mostrar en sidebar
   const roleDisplay = customRole
     ? customRole.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
@@ -51,10 +59,10 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
   return (
     <div className="flex h-screen bg-slate-50">
       {/* Sidebar Desktop */}
-      <aside className="hidden md:flex flex-col w-64 bg-slate-900 text-white shadow-xl">
-        <div className="p-6 border-b border-slate-700">
+      <aside className="hidden md:flex flex-col w-64 text-white shadow-xl" style={{ background: brandColor, transition: 'background 0.4s ease' }}>
+        <div className="p-6" style={{ borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
           <div className="flex items-center gap-3">
-            <div className={`${logoUrl ? 'bg-white' : 'bg-blue-600'} p-2 rounded-lg flex items-center justify-center overflow-hidden w-12 h-12 flex-shrink-0`}>
+            <div className="p-2 rounded-lg flex items-center justify-center overflow-hidden w-12 h-12 flex-shrink-0" style={{ background: logoUrl ? '#fff' : 'rgba(0,0,0,0.3)' }}>
               {logoUrl
                 ? <img src={logoUrl} alt="Logo" className="w-full h-full object-contain mix-blend-multiply" />
                 : <Building2 size={24} className="text-white" />}
@@ -75,18 +83,17 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
           {navItems.map((item) => (
             <Link key={item.path} to={item.path}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                isActive(item.path)
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}>
+                isActive(item.path) ? 'text-white font-semibold' : 'text-white/60 hover:text-white'
+              }`}
+              style={{ background: isActive(item.path) ? 'rgba(0,0,0,0.3)' : 'transparent' }}>
               <item.icon size={20} />
               <span className="font-medium">{item.label}</span>
             </Link>
           ))}
         </nav>
 
-        <div className="p-4 border-t border-slate-700 space-y-2">
-          <div className="flex items-center gap-3 px-4 py-3 bg-slate-800/50 rounded-lg">
+        <div className="p-4 space-y-2" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
+          <div className="flex items-center gap-3 px-4 py-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.2)' }}>
             <Globe size={18} className="text-slate-400" />
             <select value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
               className="bg-transparent text-sm font-medium text-white focus:outline-none w-full cursor-pointer">
@@ -96,7 +103,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
             </select>
           </div>
 
-          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-800">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.25)' }}>
             <div className="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center">
               <User size={16} />
             </div>
@@ -124,7 +131,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
 
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/90 md:hidden flex flex-col p-4">
+        <div className="fixed inset-0 z-50 md:hidden flex flex-col p-4" style={{ background: `rgba(${brandRgb},0.97)` }}>
           <div className="flex justify-end mb-8">
             <button onClick={() => setIsMobileMenuOpen(false)} className="text-white text-2xl font-bold">✕</button>
           </div>
@@ -137,7 +144,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
           ))}
           <div className="mt-4">
             <select value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
-              className="w-full bg-slate-800 text-white p-3 rounded-lg">
+              className="w-full text-white p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.3)' }}>
               <option value="COP">COP (Colombia)</option>
               <option value="USD">USD (Dólar)</option>
               <option value="EUR">EUR (Euro)</option>
