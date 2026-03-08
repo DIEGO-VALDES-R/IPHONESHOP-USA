@@ -24,6 +24,7 @@ const BUSINESS_TYPES = [
   { id: 'farmacia',          label: '💊 Farmacia / Droguería' },
   { id: 'supermercado',      label: '🛒 Supermercado / Abarrotes' },
   { id: 'salon',             label: '💇 Salón de Belleza / Spa' },
+  { id: 'zapateria',         label: '👟 Zapatería / Marroquinería' },
   { id: 'otro',              label: '📦 Otro' },
 ];
 

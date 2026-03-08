@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, Package, Wrench,
   Settings, LogOut, Menu, Building2, User,
-  Landmark, FileText, Globe, Receipt, ShieldCheck, Users, Utensils, ChefHat, Scissors
+  Landmark, FileText, Globe, Receipt, ShieldCheck, Users, Utensils, ChefHat, Scissors, Hammer
 } from 'lucide-react';
 import { useCurrency, CurrencyCode } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
@@ -31,6 +31,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
     : cfg.business_type ? [cfg.business_type] : ['general'];
   const isRestaurant = businessTypes.includes('restaurante');
   const isSalon      = businessTypes.includes('salon');
+  const isZapateria  = businessTypes.includes('zapateria');
 
   const navItems = [
     { label: 'Dashboard',          path: '/',             icon: LayoutDashboard, show: true },
@@ -42,7 +43,8 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
     { label: 'Cartera / CxC',      path: '/receivables',  icon: FileText,        show: hasPermission('can_view_reports') || isAdminOrMaster },
     { label: 'Mesas / Restaurante', path: '/tables',      icon: Utensils,        show: isRestaurant && isAdminOrMaster },
     { label: 'Display de Cocina',  path: '/kitchen',      icon: ChefHat,         show: isRestaurant && isAdminOrMaster },
-    { label: 'Salón de Belleza',   path: '/salon',        icon: Scissors,        show: isSalon && isAdminOrMaster },
+    { label: 'Salón de Belleza',          path: '/salon',        icon: Scissors,   show: isSalon      && isAdminOrMaster },
+    { label: 'Zapatería / Marroquinería', path: '/shoe-repair',  icon: Hammer,     show: isZapateria  && isAdminOrMaster },
     { label: 'Sucursales',         path: '/branches',     icon: Building2,       show: isPro && isAdminOrMaster },
     { label: 'Equipo',             path: '/team',         icon: Users,           show: isPro && (hasPermission('can_manage_team') || isAdminOrMaster) },
     { label: 'Configuración',      path: '/settings',     icon: Settings,        show: isAdminOrMaster },

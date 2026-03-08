@@ -16,7 +16,8 @@ import Team from './pages/Team';
 import Tables from './pages/Tables';
 import KitchenDisplay from './pages/KitchenDisplay';
 import BeautySalon from './pages/BeautySalon';
-import { LandingPage, RegisterPage, AdminPanel } from './LandingPage';
+import ShoeRepair  from './pages/ShoeRepair';
+import { LandingPage, RegisterPage, AdminPanel, ClientPortal } from './LandingPage';
 import { ContractSign } from './ContractSign';
 import AcceptInvitation from './AcceptInvitation';
 import { Toaster } from 'react-hot-toast';
@@ -314,11 +315,12 @@ const AppRoutes: React.FC = () => (
     <Route path="/tables"       element={<Tables />} />
     <Route path="/kitchen"      element={<KitchenDisplay />} />
     <Route path="/salon"        element={<BeautySalon />} />
+    <Route path="/shoe-repair"  element={<ShoeRepair />} />
   </Routes>
 );
 
 // ── APP ───────────────────────────────────────────────────────────────────────
-type AppView = 'landing' | 'login' | 'register' | 'app' | 'admin' | 'pending' | 'past_due' | 'preview';
+type AppView = 'landing' | 'login' | 'register' | 'app' | 'admin' | 'pending' | 'past_due' | 'preview' | 'client';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
@@ -424,7 +426,7 @@ const App: React.FC = () => {
   if (view === 'pending'  && session) return (<><Toaster position="top-right" /><PendingScreen  email={userEmail} onRetry={retryCheck} /></>);
   if (view === 'past_due' && session) return (<><Toaster position="top-right" /><PastDueScreen  email={userEmail} onRetry={retryCheck} /></>);
   if (view === 'login')    return (<><Toaster position="top-right" /><Login onShowLanding={() => setView('landing')} onShowRegister={() => setView('register')} /></>);
-  if (!session)            return (<><Toaster position="top-right" /><LandingPage onLogin={() => setView('login')} onRegister={() => setView('register')} /></>);
+  if (!session)            return (<><Toaster position="top-right" />{view === 'client' ? <ClientPortal onBack={() => setView('landing')} /> : <LandingPage onLogin={() => setView('login')} onRegister={() => setView('register')} onClientPortal={() => setView('client')} />}</>);
 
   if (view === 'preview' && previewCompanyId) return (
     <>
