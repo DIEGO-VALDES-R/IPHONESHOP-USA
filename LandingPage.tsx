@@ -230,7 +230,8 @@ export const RegisterPage: React.FC<{ onBack: () => void; onSuccess: () => void 
   const [registered, setRegistered] = useState(false);
   const [form, setForm] = useState({
     email: '', password: '', confirmPassword: '',
-    businessName: '', nit: '', phone: '', address: '', plan: 'BASIC'
+    businessName: '', nit: '', phone: '', address: '', plan: 'BASIC',
+    businessType: 'general'
   });
 
   const f = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -254,7 +255,7 @@ export const RegisterPage: React.FC<{ onBack: () => void; onSuccess: () => void 
           address: form.address, email: form.email,
           subscription_plan: form.plan,
           subscription_status: 'PENDING',
-          config: { tax_rate: 19, currency_symbol: '$', invoice_prefix: 'POS' }
+          config: { tax_rate: 19, currency_symbol: '$', invoice_prefix: 'POS', business_type: form.businessType, business_types: [form.businessType] }
         }).select().single();
       if (companyError) throw companyError;
 
@@ -366,8 +367,25 @@ export const RegisterPage: React.FC<{ onBack: () => void; onSuccess: () => void 
             <div><label style={labelStyle}>Teléfono</label><input value={form.phone} onChange={f('phone')} placeholder="300 123 4567" style={inputStyle} /></div>
             <div><label style={labelStyle}>Dirección</label><input value={form.address} onChange={f('address')} placeholder="Calle 123 # 45-67" style={inputStyle} /></div>
             <div>
+              <label style={labelStyle}>Tipo de negocio</label>
+              <select value={form.businessType} onChange={f('businessType')} style={{ ...inputStyle, cursor: 'pointer' }}>
+                <option value="general">🏪 Tienda General</option>
+                <option value="tienda_tecnologia">📱 Tecnología / Celulares</option>
+                <option value="restaurante">🍽️ Restaurante / Cafetería</option>
+                <option value="ropa">👗 Ropa / Calzado</option>
+                <option value="zapateria">👟 Zapatería / Marroquinería</option>
+                <option value="ferreteria">🔧 Ferretería / Construcción</option>
+                <option value="farmacia">💊 Farmacia / Droguería</option>
+                <option value="supermercado">🛒 Supermercado / Abarrotes</option>
+                <option value="salon">💇 Salón de Belleza / Spa</option>
+                <option value="odontologia">🦷 Consultorio Odontológico</option>
+                <option value="otro">📦 Otro</option>
+              </select>
+            </div>
+            <div>
               <label style={labelStyle}>Plan</label>
               <select value={form.plan} onChange={f('plan')} style={{ ...inputStyle, cursor: 'pointer' }}>
+                <option value="TRIAL">🎁 7 días gratis — Sin tarjeta</option>
                 <option value="BASIC">Basic — $65.000/mes</option>
                 <option value="PRO">Pro — $120.000/mes ⭐</option>
                 <option value="ENTERPRISE">Enterprise — $249.900/mes 🏢</option>
