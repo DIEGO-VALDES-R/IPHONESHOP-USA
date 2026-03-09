@@ -8,6 +8,7 @@ import {
   Stethoscope, ClipboardList, ShoppingCart, Receipt,
   TrendingUp, Package, RefreshCw, Printer
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useCompany } from '../hooks/useCompany';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -152,14 +153,118 @@ const uid = () => crypto.randomUUID();
 const today = () => new Date().toISOString().split('T')[0];
 
 // ══════════════════════════════════════════════════════════════════════════════
-// MAIN COMPONENT
+// COMPONENTES UI — definidos FUERA del componente principal para evitar
+// que React los destruya y recree en cada render (bug de pérdida de foco)
 // ══════════════════════════════════════════════════════════════════════════════
+
+const Card: React.FC<{ title: string; value: string | number; sub?: string; icon: React.ReactNode; color: string }> =
+  ({ title, value, sub, icon, color }) => (
+  <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 flex items-center gap-4">
+    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: color + '18' }}>
+      <span style={{ color }}>{icon}</span>
+    </div>
+    <div>
+      <p className="text-sm text-slate-500 font-medium">{title}</p>
+      <p className="text-2xl font-bold text-slate-800">{value}</p>
+      {sub && <p className="text-xs text-slate-400">{sub}</p>}
+    </div>
+  </div>
+);
+
+const Input: React.FC<{ label: string; value: string | number; onChange: (v: any) => void; type?: string; required?: boolean }> =
+  ({ label, value, onChange, type = 'text', required }) => (
+  <div>
+    <label className="block text-xs font-semibold text-slate-500 mb-1">{label}{required && <span className="text-red-400 ml-1">*</span>}</label>
+    <input type={type} value={value} onChange={e => onChange(type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value)}
+      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent" />
+  </div>
+);
+
+const Select: React.FC<{ label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }> =
+  ({ label, value, onChange, options }) => (
+  <div>
+    <label className="block text-xs font-semibold text-slate-500 mb-1">{label}</label>
+    <select value={value} onChange={e => onChange(e.target.value)}
+      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none bg-white">
+      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  </div>
+);
+
+const Textarea: React.FC<{ label: string; value: string; onChange: (v: string) => void; rows?: number }> =
+  ({ label, value, onChange, rows = 3 }) => (
+  <div>
+    <label className="block text-xs font-semibold text-slate-500 mb-1">{label}</label>
+    <textarea value={value} onChange={e => onChange(e.target.value)} rows={rows}
+      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none resize-none" />
+  </div>
+);
+
+const ModalWrapper: React.FC<{ title: string; onClose: () => void; children: React.ReactNode; onSave: () => void; wide?: boolean; brandColor: string }> =
+  ({ title, onClose, children, onSave, wide, brandColor }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className={`bg-white rounded-2xl shadow-2xl flex flex-col ${wide ? 'w-full max-w-3xl' : 'w-full max-w-lg'} max-h-[90vh]`}>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+        <h3 className="font-bold text-lg text-slate-800">{title}</h3>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+      </div>
+      <div className="overflow-y-auto flex-1 px-6 py-4 space-y-3">{children}</div>
+      <div className="px-6 py-4 border-t border-slate-100 flex gap-3 justify-end">
+        <button onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-medium">Cancelar</button>
+        <button onClick={onSave} className="px-5 py-2 rounded-lg text-white text-sm font-semibold shadow" style={{ background: brandColor }}>Guardar</button>
+      </div>
+    </div>
+  </div>
+);
+
+const TableWrapper: React.FC<{ headers: string[]; children: React.ReactNode; onAdd: () => void; btnLabel: string; search?: boolean; brandColor: string; searchQ: string; setSearchQ: (v: string) => void }> =
+  ({ headers, children, onAdd, btnLabel, search, brandColor, searchQ, setSearchQ }) => (
+  <div>
+    <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+      {search && (
+        <div className="relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input placeholder="Buscar..." value={searchQ} onChange={e => setSearchQ(e.target.value)}
+            className="pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm w-56 focus:outline-none" />
+        </div>
+      )}
+      <button onClick={onAdd}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-semibold shadow ml-auto"
+        style={{ background: brandColor }}>
+        <Plus size={16} />{btnLabel}
+      </button>
+    </div>
+    <div className="overflow-x-auto rounded-xl border border-slate-100">
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 border-b border-slate-100">
+          <tr>{headers.map(h => <th key={h} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">{h}</th>)}</tr>
+        </thead>
+        <tbody className="divide-y divide-slate-50">{children}</tbody>
+      </table>
+    </div>
+  </div>
+);
+
+const Row: React.FC<{ cells: React.ReactNode[]; onEdit?: () => void; onDelete?: () => void; onView?: () => void }> =
+  ({ cells, onEdit, onDelete, onView }) => (
+  <tr className="hover:bg-slate-50 transition-colors">
+    {cells.map((c, i) => <td key={i} className="px-4 py-3 text-slate-700">{c}</td>)}
+    <td className="px-4 py-3">
+      <div className="flex gap-2">
+        {onView   && <button onClick={onView}   className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-500"><Eye size={14} /></button>}
+        {onEdit   && <button onClick={onEdit}   className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-500"><Edit2 size={14} /></button>}
+        {onDelete && <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400"><Trash2 size={14} /></button>}
+      </div>
+    </td>
+  </tr>
+);
 
 const Veterinaria: React.FC = () => {
   const { company } = useCompany();
   const { formatCurrency } = useCurrency();
   const companyId = company?.id;
   const brandColor = (company?.config as any)?.primary_color || '#0ea5e9';
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [loading, setLoading] = useState(false);
@@ -214,6 +319,7 @@ const Veterinaria: React.FC = () => {
   const [formPlan, setFormPlan]                 = useState<Plan>(emptyPlan());
   const [formFactura, setFormFactura]           = useState<FacturaVet>(emptyFactura());
   const [formAbono, setFormAbono]               = useState<number>(0);
+  const [formPOS, setFormPOS]                   = useState({ mascota_id: '', servicio: '', total: '' });
 
   // ── LOCAL STORAGE FALLBACK ──
   const KEY = (k: string) => `vet_${companyId}_${k}`;
@@ -468,6 +574,21 @@ const Veterinaria: React.FC = () => {
 
   const closeModal = () => { setModal(null); setEditing(null); };
 
+  // ── ENVIAR AL POS ──────────────────────────────────────────────────────────
+  const enviarAlPOS = (mascota: Mascota, propietario: Propietario | undefined, servicio: string, total: number) => {
+    const params = new URLSearchParams({
+      vet:      mascota.id!,
+      cliente:  propietario?.nombre || mascota.nombre,
+      cedula:   propietario?.documento || '',
+      tel:      propietario?.telefono || '',
+      email:    propietario?.correo || '',
+      servicio,
+      total:    total.toString(),
+      ticket:   `VET-${mascota.id!.slice(0,6).toUpperCase()}`,
+    });
+    navigate(`/pos?${params.toString()}`);
+  };
+
   const openEdit = (tab: string, item: any) => {
     setEditing(item);
     const formMap: Record<string, [React.Dispatch<any>, any]> = {
@@ -516,109 +637,6 @@ const Veterinaria: React.FC = () => {
     const [c, l] = map[status] || ['#94a3b8', status];
     return pill(l, c);
   };
-
-  const Card: React.FC<{ title: string; value: string | number; sub?: string; icon: React.ReactNode; color: string }> =
-    ({ title, value, sub, icon, color }) => (
-    <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 flex items-center gap-4">
-      <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: color + '18' }}>
-        <span style={{ color }}>{icon}</span>
-      </div>
-      <div>
-        <p className="text-sm text-slate-500 font-medium">{title}</p>
-        <p className="text-2xl font-bold text-slate-800">{value}</p>
-        {sub && <p className="text-xs text-slate-400">{sub}</p>}
-      </div>
-    </div>
-  );
-
-  const ModalWrapper: React.FC<{ title: string; onClose: () => void; children: React.ReactNode; onSave: () => void; wide?: boolean }> =
-    ({ title, onClose, children, onSave, wide }) => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className={`bg-white rounded-2xl shadow-2xl flex flex-col ${wide ? 'w-full max-w-3xl' : 'w-full max-w-lg'} max-h-[90vh]`}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h3 className="font-bold text-lg text-slate-800">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-        </div>
-        <div className="overflow-y-auto flex-1 px-6 py-4 space-y-3">{children}</div>
-        <div className="px-6 py-4 border-t border-slate-100 flex gap-3 justify-end">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-medium">Cancelar</button>
-          <button onClick={onSave} className="px-5 py-2 rounded-lg text-white text-sm font-semibold shadow" style={{ background: brandColor }}>Guardar</button>
-        </div>
-      </div>
-    </div>
-  );
-
-  const Input: React.FC<{ label: string; value: string | number; onChange: (v: any) => void; type?: string; required?: boolean }> =
-    ({ label, value, onChange, type = 'text', required }) => (
-    <div>
-      <label className="block text-xs font-semibold text-slate-500 mb-1">{label}{required && <span className="text-red-400 ml-1">*</span>}</label>
-      <input type={type} value={value} onChange={e => onChange(type === 'number' ? parseFloat(e.target.value)||0 : e.target.value)}
-        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:border-transparent"
-        style={{ '--tw-ring-color': brandColor } as any} />
-    </div>
-  );
-
-  const Select: React.FC<{ label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }> =
-    ({ label, value, onChange, options }) => (
-    <div>
-      <label className="block text-xs font-semibold text-slate-500 mb-1">{label}</label>
-      <select value={value} onChange={e => onChange(e.target.value)}
-        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none bg-white">
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </div>
-  );
-
-  const Textarea: React.FC<{ label: string; value: string; onChange: (v: string) => void; rows?: number }> =
-    ({ label, value, onChange, rows = 3 }) => (
-    <div>
-      <label className="block text-xs font-semibold text-slate-500 mb-1">{label}</label>
-      <textarea value={value} onChange={e => onChange(e.target.value)} rows={rows}
-        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none resize-none" />
-    </div>
-  );
-
-  const TableWrapper: React.FC<{ headers: string[]; children: React.ReactNode; onAdd: () => void; btnLabel: string; search?: boolean }> =
-    ({ headers, children, onAdd, btnLabel, search }) => (
-    <div>
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        {search && (
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input placeholder="Buscar..." value={searchQ} onChange={e => setSearchQ(e.target.value)}
-              className="pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm w-56 focus:outline-none" />
-          </div>
-        )}
-        <button onClick={() => { setEditing(null); onAdd(); }}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-semibold shadow ml-auto"
-          style={{ background: brandColor }}>
-          <Plus size={16} />{btnLabel}
-        </button>
-      </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-100">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-b border-slate-100">
-            <tr>{headers.map(h => <th key={h} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">{h}</th>)}</tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">{children}</tbody>
-        </table>
-      </div>
-    </div>
-  );
-
-  const Row: React.FC<{ cells: React.ReactNode[]; onEdit?: () => void; onDelete?: () => void; onView?: () => void }> =
-    ({ cells, onEdit, onDelete, onView }) => (
-    <tr className="hover:bg-slate-50 transition-colors">
-      {cells.map((c, i) => <td key={i} className="px-4 py-3 text-slate-700">{c}</td>)}
-      <td className="px-4 py-3">
-        <div className="flex gap-2">
-          {onView   && <button onClick={onView}   className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-500"><Eye size={14} /></button>}
-          {onEdit   && <button onClick={onEdit}   className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-500"><Edit2 size={14} /></button>}
-          {onDelete && <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400"><Trash2 size={14} /></button>}
-        </div>
-      </td>
-    </tr>
-  );
 
   const mascotas_opts = mascotas.map(m => ({ value: m.id!, label: `${m.nombre} (${m.especie})` }));
   const personal_vets = personal.filter(p => p.tipo === 'VETERINARIO' || p.tipo === 'CIRUJANO');
@@ -704,7 +722,7 @@ const Veterinaria: React.FC = () => {
 
   const renderPropietarios = () => (
     <TableWrapper headers={['Nombre','Documento','Teléfono','Correo','Mascotas','Acciones']}
-      onAdd={() => { setFormPropietario(emptyPropietario()); setModal('propietarios'); }} btnLabel="Nuevo Propietario" search>
+      onAdd={() => { setFormPropietario(emptyPropietario()); setModal('propietarios'); }} btnLabel="Nuevo Propietario" search brandColor={brandColor} searchQ={searchQ} setSearchQ={setSearchQ}>
       {filteredQ(propietarios, ['nombre','documento','telefono']).map(p => (
         <Row key={p.id}
           cells={[
@@ -721,7 +739,7 @@ const Veterinaria: React.FC = () => {
 
   const renderMascotas = () => (
     <TableWrapper headers={['Nombre','Propietario','Especie','Raza','Sexo','Fecha Nac.','Acciones']}
-      onAdd={() => { setFormMascota(emptyMascota()); setModal('mascotas'); }} btnLabel="Nueva Mascota" search>
+      onAdd={() => { setFormMascota(emptyMascota()); setModal('mascotas'); }} btnLabel="Nueva Mascota" search brandColor={brandColor} searchQ={searchQ} setSearchQ={setSearchQ}>
       {filteredQ(mascotas, ['nombre','especie','raza','propietario_nombre']).map(m => (
         <Row key={m.id}
           cells={[
@@ -740,7 +758,7 @@ const Veterinaria: React.FC = () => {
 
   const renderPersonal = () => (
     <TableWrapper headers={['Nombre','Documento','Tipo','Especialidad','Teléfono','Estado','Acciones']}
-      onAdd={() => { setFormPersonal(emptyPersonal()); setModal('personal'); }} btnLabel="Nuevo Personal" search>
+      onAdd={() => { setFormPersonal(emptyPersonal()); setModal('personal'); }} btnLabel="Nuevo Personal" search brandColor={brandColor} searchQ={searchQ} setSearchQ={setSearchQ}>
       {filteredQ(personal, ['nombre','documento','especialidad']).map(p => (
         <Row key={p.id}
           cells={[
@@ -757,7 +775,7 @@ const Veterinaria: React.FC = () => {
 
   const renderConsultorios = () => (
     <TableWrapper headers={['Nombre','Veterinario','Auxiliar','Estado','Acciones']}
-      onAdd={() => { setFormConsultorio(emptyConsultorio()); setModal('consultorios'); }} btnLabel="Nuevo Consultorio">
+      onAdd={() => { setFormConsultorio(emptyConsultorio()); setModal('consultorios'); }} btnLabel="Nuevo Consultorio" brandColor={brandColor} searchQ={searchQ} setSearchQ={setSearchQ}>
       {consultorios.map(c => (
         <Row key={c.id}
           cells={[
@@ -775,7 +793,7 @@ const Veterinaria: React.FC = () => {
 
   const renderAgenda = () => (
     <TableWrapper headers={['Mascota','Propietario','Fecha','Hora','Veterinario','Motivo','Estado','Acciones']}
-      onAdd={() => { setFormCita(emptyCita()); setModal('citas'); }} btnLabel="Nueva Cita" search>
+      onAdd={() => { setFormCita(emptyCita()); setModal('citas'); }} btnLabel="Nueva Cita" search brandColor={brandColor} searchQ={searchQ} setSearchQ={setSearchQ}>
       {filteredQ(citas, ['mascota_nombre','propietario_nombre','motivo']).sort((a,b) => a.fecha > b.fecha ? -1 : 1).map(c => (
         <Row key={c.id}
           cells={[
@@ -793,7 +811,7 @@ const Veterinaria: React.FC = () => {
 
   const renderHistoria = () => (
     <TableWrapper headers={['Mascota','Fecha','Veterinario','Diagnóstico','Peso','T°','Acciones']}
-      onAdd={() => { setFormHistoria(emptyHistoria()); setModal('historia'); }} btnLabel="Nueva Historia" search>
+      onAdd={() => { setFormHistoria(emptyHistoria()); setModal('historia'); }} btnLabel="Nueva Historia" search brandColor={brandColor} searchQ={searchQ} setSearchQ={setSearchQ}>
       {filteredQ(historias, ['mascota_nombre','diagnostico']).sort((a,b) => a.fecha > b.fecha ? -1 : 1).map(h => (
         <Row key={h.id}
           cells={[
@@ -814,7 +832,7 @@ const Veterinaria: React.FC = () => {
   const renderVacunacion = () => (
     <div className="space-y-4">
       <TableWrapper headers={['Mascota','Vacuna','Fecha Aplicada','Próxima Dosis','Veterinario','Estado','Acciones']}
-        onAdd={() => { setFormVacuna(emptyVacuna()); setModal('vacunas'); }} btnLabel="Registrar Vacuna" search>
+        onAdd={() => { setFormVacuna(emptyVacuna()); setModal('vacunas'); }} btnLabel="Registrar Vacuna" search brandColor={brandColor} searchQ={searchQ} setSearchQ={setSearchQ}>
         {filteredQ(vacunas, ['mascota_nombre','nombre_vacuna']).sort((a,b) => a.fecha_aplicada > b.fecha_aplicada ? -1 : 1).map(v => {
           const vencida = v.proxima_dosis && v.proxima_dosis <= today();
           return (
@@ -884,7 +902,7 @@ const Veterinaria: React.FC = () => {
 
   const renderHospitalizacion = () => (
     <TableWrapper headers={['Mascota','Fecha Ingreso','Veterinario','Motivo','Estado','Acciones']}
-      onAdd={() => { setFormHospitalizacion(emptyHospitalizacion()); setModal('hospitalizacion'); }} btnLabel="Nueva Hospitalización" search>
+      onAdd={() => { setFormHospitalizacion(emptyHospitalizacion()); setModal('hospitalizacion'); }} btnLabel="Nueva Hospitalización" search brandColor={brandColor} searchQ={searchQ} setSearchQ={setSearchQ}>
       {filteredQ(hospitalizaciones, ['mascota_nombre','motivo']).sort((a,b) => a.fecha_ingreso > b.fecha_ingreso ? -1 : 1).map(h => (
         <Row key={h.id}
           cells={[
@@ -902,7 +920,7 @@ const Veterinaria: React.FC = () => {
 
   const renderFarmacia = () => (
     <TableWrapper headers={['Nombre','Tipo','Presentación','Stock','Precio','Acciones']}
-      onAdd={() => { setFormMedicamento(emptyMedicamento()); setModal('medicamentos'); }} btnLabel="Nuevo Medicamento" search>
+      onAdd={() => { setFormMedicamento(emptyMedicamento()); setModal('medicamentos'); }} btnLabel="Nuevo Medicamento" search brandColor={brandColor} searchQ={searchQ} setSearchQ={setSearchQ}>
       {filteredQ(medicamentos, ['nombre','tipo']).map(m => (
         <Row key={m.id}
           cells={[
@@ -920,7 +938,7 @@ const Veterinaria: React.FC = () => {
 
   const renderServicios = () => (
     <TableWrapper headers={['Nombre','Descripción','Precio','Estado','Acciones']}
-      onAdd={() => { setFormServicio(emptyServicio()); setModal('servicios'); }} btnLabel="Nuevo Servicio">
+      onAdd={() => { setFormServicio(emptyServicio()); setModal('servicios'); }} btnLabel="Nuevo Servicio" brandColor={brandColor} searchQ={searchQ} setSearchQ={setSearchQ}>
       {servicios.map(s => (
         <Row key={s.id}
           cells={[
@@ -967,58 +985,161 @@ const Veterinaria: React.FC = () => {
     </div>
   );
 
-  const renderFacturacion = () => (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <button onClick={() => { setFormFactura(emptyFactura()); setModal('facturas'); }}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-semibold shadow"
-          style={{ background: brandColor }}>
-          <Plus size={16} /> Nueva Factura
+  const renderFacturacion = () => {
+    const handleEnviarPOS = () => {
+      if (!formPOS.mascota_id || !formPOS.servicio.trim() || !parseFloat(formPOS.total)) {
+        toast.error('Completa mascota, servicio y total');
+        return;
+      }
+      const mascota = mascotas.find(m => m.id === formPOS.mascota_id);
+      const prop = propietarios.find(p => p.id === mascota?.propietario_id);
+      if (!mascota) return;
+      enviarAlPOS(mascota, prop, formPOS.servicio, parseFloat(formPOS.total));
+    };
+
+    return (
+    <div className="space-y-6">
+      {/* ── Enviar al POS ── */}
+      <div className="bg-gradient-to-br from-sky-50 to-indigo-50 border border-sky-100 rounded-2xl p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-xl bg-sky-500 flex items-center justify-center">
+            <ShoppingCart size={20} className="text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold text-slate-800">Generar Factura en POS</h3>
+            <p className="text-xs text-slate-500">Envía el servicio directamente al Punto de Venta para facturar</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          {/* Mascota */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Mascota / Paciente <span className="text-red-400">*</span></label>
+            <select value={formPOS.mascota_id} onChange={e => setFormPOS(f => ({...f, mascota_id: e.target.value}))}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none bg-white">
+              <option value="">Seleccionar mascota...</option>
+              {mascotas.map(m => {
+                const prop = propietarios.find(p => p.id === m.propietario_id);
+                return <option key={m.id} value={m.id}>{m.nombre} ({m.especie}){prop ? ` — ${prop.nombre}` : ''}</option>;
+              })}
+            </select>
+          </div>
+
+          {/* Servicio */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Servicio / Descripción <span className="text-red-400">*</span></label>
+            <select value={formPOS.servicio} onChange={e => setFormPOS(f => ({...f, servicio: e.target.value}))}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none bg-white">
+              <option value="">Seleccionar o escribir...</option>
+              {servicios.filter(s => s.activo).map(s => (
+                <option key={s.id} value={s.nombre}>{s.nombre} — {fmtCurrency(s.precio)}</option>
+              ))}
+            </select>
+            <input
+              type="text"
+              placeholder="O escribe el servicio manualmente..."
+              value={formPOS.servicio}
+              onChange={e => setFormPOS(f => ({...f, servicio: e.target.value}))}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none mt-1"
+            />
+          </div>
+
+          {/* Total */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Total a cobrar <span className="text-red-400">*</span></label>
+            <input
+              type="number"
+              placeholder="0"
+              value={formPOS.total}
+              onChange={e => {
+                const v = e.target.value;
+                setFormPOS(f => ({...f, total: v}));
+                // Auto-fill from selected service
+              }}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none"
+            />
+          </div>
+        </div>
+
+        {/* Preview propietario */}
+        {formPOS.mascota_id && (() => {
+          const m = mascotas.find(x => x.id === formPOS.mascota_id);
+          const p = propietarios.find(x => x.id === m?.propietario_id);
+          return m ? (
+            <div className="bg-white rounded-xl border border-sky-100 p-3 mb-4 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-sky-100 flex items-center justify-center"><PawPrint size={16} className="text-sky-500" /></div>
+              <div className="flex-1">
+                <p className="font-semibold text-slate-800 text-sm">{m.nombre} <span className="text-slate-400 font-normal">({m.especie} · {m.raza})</span></p>
+                {p && <p className="text-xs text-slate-500">Propietario: {p.nombre} · {p.telefono}</p>}
+              </div>
+              {formPOS.total && <p className="font-bold text-lg text-sky-600">{fmtCurrency(parseFloat(formPOS.total) || 0)}</p>}
+            </div>
+          ) : null;
+        })()}
+
+        <button onClick={handleEnviarPOS}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold shadow-lg hover:opacity-90 transition-opacity"
+          style={{ background: `linear-gradient(135deg, ${brandColor}, #6366f1)` }}>
+          <ShoppingCart size={18} /> Ir al POS y Facturar
         </button>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-100">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-b border-slate-100">
-            <tr>
-              {['Mascota','Propietario','Fecha','Servicio','Total','Abonado','Saldo','Estado','Acciones'].map(h =>
-                <th key={h} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">{h}</th>
-              )}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {facturas.sort((a,b) => a.fecha > b.fecha ? -1 : 1).map(f => (
-              <tr key={f.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-semibold">{f.mascota_nombre || '-'}</td>
-                <td className="px-4 py-3">{f.propietario_nombre || '-'}</td>
-                <td className="px-4 py-3">{f.fecha}</td>
-                <td className="px-4 py-3 max-w-[160px] truncate">{f.servicio_descripcion}</td>
-                <td className="px-4 py-3 font-bold">{fmtCurrency(f.total)}</td>
-                <td className="px-4 py-3 text-emerald-600 font-semibold">{fmtCurrency(f.abonado)}</td>
-                <td className="px-4 py-3 text-red-500 font-semibold">{fmtCurrency(f.saldo)}</td>
-                <td className="px-4 py-3">{statusPill(f.estado)}</td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-2">
-                    {f.estado !== 'PAGADA' && (
-                      <button onClick={() => { setDetailItem(f); setModal('abono'); }}
-                        className="px-2 py-1 rounded text-xs font-semibold text-white" style={{ background: brandColor }}>
-                        Abonar
-                      </button>
-                    )}
-                    <button onClick={() => deleteItem('facturas', f.id!)} className="p-1.5 rounded hover:bg-red-50 text-red-400">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </td>
+
+      {/* ── Historial de cobros internos / abonos ── */}
+      <div>
+        <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
+          <Receipt size={16} style={{ color: brandColor }} /> Historial de Cobros Veterinarios
+        </h3>
+        <div className="overflow-x-auto rounded-xl border border-slate-100">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-100">
+              <tr>
+                {['Mascota','Propietario','Fecha','Servicio','Total','Abonado','Saldo','Estado','Acciones'].map(h =>
+                  <th key={h} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase">{h}</th>
+                )}
               </tr>
-            ))}
-            {facturas.length === 0 && (
-              <tr><td colSpan={9} className="text-center py-8 text-slate-400">No hay facturas registradas</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {facturas.sort((a,b) => a.fecha > b.fecha ? -1 : 1).map(f => (
+                <tr key={f.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 font-semibold">{f.mascota_nombre || '-'}</td>
+                  <td className="px-4 py-3">{f.propietario_nombre || '-'}</td>
+                  <td className="px-4 py-3">{f.fecha}</td>
+                  <td className="px-4 py-3 max-w-[160px] truncate">{f.servicio_descripcion}</td>
+                  <td className="px-4 py-3 font-bold">{fmtCurrency(f.total)}</td>
+                  <td className="px-4 py-3 text-emerald-600 font-semibold">{fmtCurrency(f.abonado)}</td>
+                  <td className="px-4 py-3 text-red-500 font-semibold">{fmtCurrency(f.saldo)}</td>
+                  <td className="px-4 py-3">{statusPill(f.estado)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      {f.estado !== 'PAGADA' && (
+                        <button
+                          onClick={() => {
+                            const mascota = mascotas.find(m => m.id === f.mascota_id);
+                            const prop = propietarios.find(p => p.id === mascota?.propietario_id);
+                            const saldo = f.saldo || (f.total - (f.abonado || 0));
+                            if (mascota) enviarAlPOS(mascota, prop, f.servicio_descripcion, saldo);
+                          }}
+                          className="flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold text-white"
+                          style={{ background: brandColor }}>
+                          <ShoppingCart size={11} /> Cobrar Saldo
+                        </button>
+                      )}
+                      <button onClick={() => deleteItem('facturas', f.id!)} className="p-1.5 rounded hover:bg-red-50 text-red-400">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {facturas.length === 0 && (
+                <tr><td colSpan={9} className="text-center py-8 text-slate-400">Las facturas generadas desde el POS aparecerán aquí</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
-  );
+  );};
 
   // ─── TAB CONTENT MAP ──────────────────────────────────────────────────────
   const tabContent: Record<TabId, () => React.ReactNode> = {
@@ -1148,7 +1269,7 @@ const Veterinaria: React.FC = () => {
   const renderModals = () => (
     <>
       {modal === 'propietarios' && (
-        <ModalWrapper title={editing?.id ? 'Editar Propietario' : 'Nuevo Propietario'} onClose={closeModal} onSave={savePropietario}>
+        <ModalWrapper title={editing?.id ? 'Editar Propietario' : 'Nuevo Propietario'} onClose={closeModal} onSave={savePropietario} brandColor={brandColor}>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2"><Input label="Nombre completo *" value={formPropietario.nombre} onChange={v => setFormPropietario(f => ({...f, nombre: v}))} required /></div>
             <Input label="Documento" value={formPropietario.documento} onChange={v => setFormPropietario(f => ({...f, documento: v}))} />
@@ -1161,7 +1282,7 @@ const Veterinaria: React.FC = () => {
       )}
 
       {modal === 'mascotas' && (
-        <ModalWrapper title={editing?.id ? 'Editar Mascota' : 'Nueva Mascota'} onClose={closeModal} onSave={saveMascota} wide>
+        <ModalWrapper title={editing?.id ? 'Editar Mascota' : 'Nueva Mascota'} onClose={closeModal} onSave={saveMascota} wide brandColor={brandColor}>
           <div className="grid grid-cols-2 gap-3">
             <Input label="Nombre *" value={formMascota.nombre} onChange={v => setFormMascota(f => ({...f, nombre: v}))} required />
             <Select label="Propietario *" value={formMascota.propietario_id}
@@ -1184,7 +1305,7 @@ const Veterinaria: React.FC = () => {
       )}
 
       {modal === 'personal' && (
-        <ModalWrapper title={editing?.id ? 'Editar Personal' : 'Nuevo Personal'} onClose={closeModal} onSave={savePersonal}>
+        <ModalWrapper title={editing?.id ? 'Editar Personal' : 'Nuevo Personal'} onClose={closeModal} onSave={savePersonal} brandColor={brandColor}>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2"><Input label="Nombre *" value={formPersonal.nombre} onChange={v => setFormPersonal(f => ({...f, nombre: v}))} required /></div>
             <Input label="Documento" value={formPersonal.documento} onChange={v => setFormPersonal(f => ({...f, documento: v}))} />
@@ -1201,7 +1322,7 @@ const Veterinaria: React.FC = () => {
       )}
 
       {modal === 'consultorios' && (
-        <ModalWrapper title={editing?.id ? 'Editar Consultorio' : 'Nuevo Consultorio'} onClose={closeModal} onSave={saveConsultorio}>
+        <ModalWrapper title={editing?.id ? 'Editar Consultorio' : 'Nuevo Consultorio'} onClose={closeModal} onSave={saveConsultorio} brandColor={brandColor}>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2"><Input label="Nombre *" value={formConsultorio.nombre} onChange={v => setFormConsultorio(f => ({...f, nombre: v}))} required /></div>
             <Select label="Veterinario" value={formConsultorio.veterinario_id}
@@ -1219,7 +1340,7 @@ const Veterinaria: React.FC = () => {
       )}
 
       {modal === 'citas' && (
-        <ModalWrapper title={editing?.id ? 'Editar Cita' : 'Nueva Cita'} onClose={closeModal} onSave={saveCita} wide>
+        <ModalWrapper title={editing?.id ? 'Editar Cita' : 'Nueva Cita'} onClose={closeModal} onSave={saveCita} wide brandColor={brandColor}>
           <div className="grid grid-cols-2 gap-3">
             <Select label="Mascota *" value={formCita.mascota_id}
               onChange={v => {
@@ -1245,7 +1366,7 @@ const Veterinaria: React.FC = () => {
       )}
 
       {modal === 'historia' && (
-        <ModalWrapper title="Nueva Historia Clínica" onClose={closeModal} onSave={saveHistoria} wide>
+        <ModalWrapper title="Nueva Historia Clínica" onClose={closeModal} onSave={saveHistoria} wide brandColor={brandColor}>
           <div className="grid grid-cols-2 gap-3">
             <Select label="Mascota *" value={formHistoria.mascota_id}
               onChange={v => setFormHistoria(f => ({...f, mascota_id: v}))}
@@ -1268,7 +1389,7 @@ const Veterinaria: React.FC = () => {
       )}
 
       {modal === 'vacunas' && (
-        <ModalWrapper title="Registrar Vacuna" onClose={closeModal} onSave={saveVacuna}>
+        <ModalWrapper title="Registrar Vacuna" onClose={closeModal} onSave={saveVacuna} brandColor={brandColor}>
           <div className="grid grid-cols-2 gap-3">
             <Select label="Mascota *" value={formVacuna.mascota_id}
               onChange={v => setFormVacuna(f => ({...f, mascota_id: v}))}
@@ -1286,7 +1407,7 @@ const Veterinaria: React.FC = () => {
       )}
 
       {modal === 'peso' && (
-        <ModalWrapper title="Registrar Peso" onClose={closeModal} onSave={savePeso}>
+        <ModalWrapper title="Registrar Peso" onClose={closeModal} onSave={savePeso} brandColor={brandColor}>
           <div className="grid grid-cols-2 gap-3">
             <Select label="Mascota *" value={formPeso.mascota_id}
               onChange={v => setFormPeso(f => ({...f, mascota_id: v}))}
@@ -1299,7 +1420,7 @@ const Veterinaria: React.FC = () => {
       )}
 
       {modal === 'hospitalizacion' && (
-        <ModalWrapper title="Nueva Hospitalización" onClose={closeModal} onSave={saveHospitalizacion} wide>
+        <ModalWrapper title="Nueva Hospitalización" onClose={closeModal} onSave={saveHospitalizacion} wide brandColor={brandColor}>
           <div className="grid grid-cols-2 gap-3">
             <Select label="Mascota *" value={formHospitalizacion.mascota_id}
               onChange={v => setFormHospitalizacion(f => ({...f, mascota_id: v}))}
@@ -1317,7 +1438,7 @@ const Veterinaria: React.FC = () => {
       )}
 
       {modal === 'medicamentos' && (
-        <ModalWrapper title={editing?.id ? 'Editar Medicamento' : 'Nuevo Medicamento'} onClose={closeModal} onSave={saveMedicamento}>
+        <ModalWrapper title={editing?.id ? 'Editar Medicamento' : 'Nuevo Medicamento'} onClose={closeModal} onSave={saveMedicamento} brandColor={brandColor}>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2"><Input label="Nombre *" value={formMedicamento.nombre} onChange={v => setFormMedicamento(f => ({...f, nombre: v}))} required /></div>
             <Select label="Tipo" value={formMedicamento.tipo}
@@ -1331,7 +1452,7 @@ const Veterinaria: React.FC = () => {
       )}
 
       {modal === 'servicios' && (
-        <ModalWrapper title={editing?.id ? 'Editar Servicio' : 'Nuevo Servicio'} onClose={closeModal} onSave={saveServicio}>
+        <ModalWrapper title={editing?.id ? 'Editar Servicio' : 'Nuevo Servicio'} onClose={closeModal} onSave={saveServicio} brandColor={brandColor}>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2"><Input label="Nombre *" value={formServicio.nombre} onChange={v => setFormServicio(f => ({...f, nombre: v}))} required /></div>
             <Input label="Precio" value={formServicio.precio} onChange={v => setFormServicio(f => ({...f, precio: v}))} type="number" />
@@ -1344,7 +1465,7 @@ const Veterinaria: React.FC = () => {
       )}
 
       {modal === 'planes' && (
-        <ModalWrapper title={editing?.id ? 'Editar Plan' : 'Nuevo Plan'} onClose={closeModal} onSave={savePlan}>
+        <ModalWrapper title={editing?.id ? 'Editar Plan' : 'Nuevo Plan'} onClose={closeModal} onSave={savePlan} brandColor={brandColor}>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2"><Input label="Nombre del Plan *" value={formPlan.nombre} onChange={v => setFormPlan(f => ({...f, nombre: v}))} required /></div>
             <Input label="Precio" value={formPlan.precio} onChange={v => setFormPlan(f => ({...f, precio: v}))} type="number" />
@@ -1358,7 +1479,7 @@ const Veterinaria: React.FC = () => {
       )}
 
       {modal === 'facturas' && (
-        <ModalWrapper title="Nueva Factura" onClose={closeModal} onSave={saveFactura} wide>
+        <ModalWrapper title="Nueva Factura" onClose={closeModal} onSave={saveFactura} wide brandColor={brandColor}>
           <div className="grid grid-cols-2 gap-3">
             <Select label="Mascota *" value={formFactura.mascota_id}
               onChange={v => setFormFactura(f => ({...f, mascota_id: v}))}

@@ -51,18 +51,28 @@ const POS: React.FC = () => {
     const params = new URLSearchParams(location.search);
     const shoeId  = params.get('shoe');
     const salonId = params.get('salon');
-    const sourceId = shoeId || salonId;
+    const vetId   = params.get('vet');
+    const sourceId = shoeId || salonId || vetId;
     if (!sourceId) return;
 
     const isShoe  = !!shoeId;
     const isSalon = !!salonId;
+    const isVet   = !!vetId;
 
     setShoeRepairId(sourceId);
     setCustomerName(params.get('cliente') || '');
     setCustomerDoc(params.get('cedula') || '');
     setCustomerPhone(params.get('tel') || '');
-    const servicioNombre = params.get('servicio') || (isShoe ? 'Reparación de calzado' : 'Servicio de salón');
-    setShoeRepairLabel(`${isShoe ? '🔧' : '✂️'} ${params.get('ticket') || sourceId.slice(0,8).toUpperCase()} — ${servicioNombre}`);
+    setCustomerEmail(params.get('email') || '');
+
+    const servicioNombre = params.get('servicio')
+      || (isShoe  ? 'Reparación de calzado'
+        : isSalon ? 'Servicio de salón'
+        : 'Servicio veterinario');
+
+    const emoji = isShoe ? '🔧' : isSalon ? '✂️' : '🐾';
+    const sku   = isShoe ? 'ZAP' : isSalon ? 'SAL' : 'VET';
+    setShoeRepairLabel(`${emoji} ${params.get('ticket') || sourceId.slice(0,8).toUpperCase()} — ${servicioNombre}`);
 
     const total = parseFloat(params.get('total') || '0');
     const abono = parseFloat(params.get('abono') || '0');
@@ -70,11 +80,11 @@ const POS: React.FC = () => {
     // Agregar como producto de servicio virtual al carrito
     const virtualService: any = {
       product: {
-        id: `${isShoe ? 'shoe' : 'salon'}-${sourceId}`,
+        id: `${sku.toLowerCase()}-${sourceId}`,
         name: servicioNombre,
         price: total,
         type: 'SERVICE',
-        sku: `${isShoe ? 'ZAP' : 'SAL'}-${sourceId.slice(0, 6)}`,
+        sku: `${sku}-${sourceId.slice(0, 6)}`,
         stock_quantity: 999,
         tax_rate: 0,
       },
@@ -444,7 +454,7 @@ const POS: React.FC = () => {
             <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
               <div>
                 <h3 className="font-bold text-xl text-slate-800">Procesar Pago</h3>
-                {shoeRepairLabel && <p className="text-xs text-blue-600 font-semibold mt-0.5">🔧 {shoeRepairLabel}</p>}
+                {shoeRepairLabel && <p className="text-xs text-blue-600 font-semibold mt-0.5">{shoeRepairLabel}</p>}
               </div>
               <div className="flex items-center gap-3">
                 {/* Toggle Abono Parcial */}
