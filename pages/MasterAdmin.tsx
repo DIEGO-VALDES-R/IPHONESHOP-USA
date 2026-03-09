@@ -20,10 +20,12 @@ const BUSINESS_TYPES = [
   { id: 'tienda_tecnologia', label: '📱 Tecnología / Celulares' },
   { id: 'restaurante',       label: '🍽️ Restaurante / Cafetería' },
   { id: 'ropa',              label: '👗 Ropa / Calzado' },
+  { id: 'zapateria',         label: '👟 Zapatería / Marroquinería' },
   { id: 'ferreteria',        label: '🔧 Ferretería / Construcción' },
   { id: 'farmacia',          label: '💊 Farmacia / Droguería' },
   { id: 'supermercado',      label: '🛒 Supermercado / Abarrotes' },
   { id: 'salon',             label: '💇 Salón de Belleza / Spa' },
+  { id: 'odontologia',       label: '🦷 Consultorio Odontológico' },
   { id: 'otro',              label: '📦 Otro' },
 ];
 
@@ -336,17 +338,22 @@ const MasterAdmin: React.FC = () => {
     e.preventDefault();
     if (!editCompany) return;
     setSaving(true);
+    const isTrial = editCompany.subscription_plan === 'TRIAL';
+    // Auto fecha de vencimiento para TRIAL (7 días desde hoy si no tiene)
+    const endDate = isTrial && !editCompany.subscription_end_date
+      ? new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
+      : editCompany.subscription_end_date || null;
     const { error } = await supabase.from('companies').update({
       name: editCompany.name, nit: editCompany.nit, email: editCompany.email,
       phone: editCompany.phone, address: editCompany.address,
-      subscription_plan: editCompany.subscription_plan,
-      subscription_status: editCompany.subscription_status,
+      subscription_plan:       editCompany.subscription_plan,
+      subscription_status:     editCompany.subscription_status,
       subscription_start_date: editCompany.subscription_start_date || null,
-      subscription_end_date: editCompany.subscription_end_date || null,
+      subscription_end_date:   endDate,
     }).eq('id', editCompany.id);
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success('Empresa actualizada');
+    if (error) { toast.error('Error: ' + error.message); return; }
+    toast.success(isTrial ? '🎁 Plan Gratis activado (7 días)' : 'Empresa actualizada');
     setShowEditModal(false);
     setEditCompany(null);
     fetchCompanies();
@@ -433,7 +440,12 @@ const MasterAdmin: React.FC = () => {
             const meta = PLAN_META[p];
             const active = data.subscription_plan === p;
             return (
-              <button key={p} type="button" onClick={() => setData({ ...data, subscription_plan: p })}
+              <button key={p} type="button" onClick={() => setData({
+                  ...data,
+                  subscription_plan: p,
+                  // Al elegir TRIAL, poner status en TRIAL automáticamente; al salir, volver a ACTIVE
+                  subscription_status: p === 'TRIAL' ? 'TRIAL' : data.subscription_status === 'TRIAL' ? 'ACTIVE' : data.subscription_status,
+                })}
                 className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 font-bold text-sm transition-all ${
                   active
                     ? p === 'ENTERPRISE' ? 'border-purple-500 bg-purple-50 text-purple-700'
