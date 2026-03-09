@@ -2,7 +2,8 @@
 import { 
   Save, Building, Receipt, Shield, X, CreditCard, 
   Upload, Image as ImageIcon, Lock, KeyRound, 
-  FileCode, Check, AlertTriangle, Palette, Crown 
+  FileCode, Check, AlertTriangle, Palette, Crown,
+  Eye, EyeOff, ShieldCheck
 } from 'lucide-react';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { toast } from 'react-hot-toast';
@@ -88,6 +89,12 @@ const Settings: React.FC = () => {
   const [deleteInvoicePin, setDeleteInvoicePin] = useState<string>(
     (safeCompany.config as any)?.delete_invoice_pin || ''
   );
+  // ── PIN auth: requiere contraseña del propietario para editar el PIN de facturas
+  const [pinAuthOpen, setPinAuthOpen] = useState(false);
+  const [pinAuthPassword, setPinAuthPassword] = useState('');
+  const [pinAuthShowPw, setPinAuthShowPw] = useState(false);
+  const [pinAuthLoading, setPinAuthLoading] = useState(false);
+  const [pinUnlocked, setPinUnlocked] = useState(false); // true = edición desbloqueada
   const [primaryColor, setPrimaryColor] = useState(
     safeCompany.primary_color || (safeCompany.config as any)?.primary_color || '#3b82f6'
   );
@@ -135,6 +142,7 @@ const Settings: React.FC = () => {
     setFormData(company as any);
     setTaxRate(cfg.tax_rate ?? 0);
     setDeleteInvoicePin(cfg.delete_invoice_pin || '');
+    setPinUnlocked(false); // re-lock whenever company reloads
     setPrimaryColor(cfg.primary_color || '#3b82f6');
     setSecondaryColor(cfg.secondary_color || '#6366f1');
     setFontColor(cfg.font_color || '#ffffff');
@@ -183,6 +191,7 @@ const Settings: React.FC = () => {
           config: { ...(formData.config || {}), tax_rate: taxRate, delete_invoice_pin: deleteInvoicePin }
         });
         toast.success('Configuración General Guardada');
+        setPinUnlocked(false); // re-lock PIN after saving
       } 
       else if (activeTab === 'DIAN') {
         // 1. Guardar en Contexto local
@@ -269,6 +278,34 @@ const Settings: React.FC = () => {
     } else {
       toast.error('Clave Maestra Incorrecta');
       setInputMasterKey('');
+    }
+  };
+
+  // ── Verificar contraseña real del propietario antes de editar PIN de facturas
+  const handlePinAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pinAuthPassword) return;
+    setPinAuthLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) throw new Error('No se pudo obtener el usuario actual');
+      const { error } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: pinAuthPassword,
+      });
+      if (error) {
+        toast.error('Contraseña incorrecta. Solo el propietario puede cambiar este PIN.');
+        setPinAuthPassword('');
+        return;
+      }
+      toast.success('✓ Identidad verificada. Puedes editar el PIN.');
+      setPinUnlocked(true);
+      setPinAuthOpen(false);
+      setPinAuthPassword('');
+    } catch (err: any) {
+      toast.error(err.message || 'Error verificando contraseña');
+    } finally {
+      setPinAuthLoading(false);
     }
   };
 
@@ -382,7 +419,7 @@ const Settings: React.FC = () => {
                 <div className="md:col-span-2 border border-amber-200 bg-amber-50 rounded-xl p-4">
                   <div className="flex items-start gap-3">
                     <div className="p-2 bg-amber-100 rounded-lg flex-shrink-0">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                      <Lock size={18} className="text-amber-700" />
                     </div>
                     <div className="flex-1">
                       <label className="block text-sm font-bold text-amber-900 mb-1">
@@ -390,30 +427,87 @@ const Settings: React.FC = () => {
                       </label>
                       <p className="text-xs text-amber-700 mb-3">
                         Se solicitará este PIN de 4 dígitos antes de eliminar cualquier factura del historial.
-                        Déjalo vacío para desactivar la protección (solo administradores podrán eliminar).
+                        Para cambiar este PIN debes verificar tu identidad con tu contraseña de acceso.
                       </p>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="password"
-                          maxLength={4}
-                          placeholder="Ej: 1234"
-                          value={deleteInvoicePin}
-                          onChange={e => {
-                            const v = e.target.value.replace(/\D/g, '').slice(0, 4);
-                            setDeleteInvoicePin(v);
-                          }}
-                          className="w-32 px-3 py-2 border border-amber-300 bg-white rounded-lg outline-none focus:ring-2 focus:ring-amber-400 font-mono text-center text-lg tracking-widest"
-                        />
-                        {deleteInvoicePin.length === 4 && (
-                          <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-1 rounded-lg">✓ PIN configurado</span>
-                        )}
-                        {deleteInvoicePin.length > 0 && deleteInvoicePin.length < 4 && (
-                          <span className="text-xs text-amber-700">Debe ser exactamente 4 dígitos</span>
-                        )}
-                        {deleteInvoicePin.length === 0 && (
-                          <span className="text-xs text-slate-400">Sin protección PIN activa</span>
-                        )}
-                      </div>
+
+                      {!pinUnlocked ? (
+                        /* LOCKED STATE */
+                        <div className="flex items-center gap-3">
+                          <div className="flex gap-1.5">
+                            {[0,1,2,3].map(i => (
+                              <div key={i} className="w-8 h-9 rounded-lg bg-amber-100 border-2 border-amber-300 flex items-center justify-center">
+                                <span className="text-amber-700 text-lg">
+                                  {deleteInvoicePin.length > i ? '●' : '—'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => { setPinAuthOpen(true); setPinAuthPassword(''); setPinAuthShowPw(false); }}
+                            className="flex items-center gap-2 px-3 py-2 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition-colors"
+                          >
+                            <KeyRound size={13} />
+                            {deleteInvoicePin.length === 4 ? 'Cambiar PIN' : 'Configurar PIN'}
+                          </button>
+                          {deleteInvoicePin.length === 4 && (
+                            <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-1 rounded-lg">✓ PIN activo</span>
+                          )}
+                          {deleteInvoicePin.length === 0 && (
+                            <span className="text-xs text-slate-400">Sin protección activa</span>
+                          )}
+                        </div>
+                      ) : (
+                        /* UNLOCKED STATE */
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-2">
+                            <ShieldCheck size={14} />
+                            Identidad verificada — puedes editar el PIN
+                          </div>
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <input
+                              type="password"
+                              maxLength={4}
+                              placeholder="Nuevo PIN (4 dígitos)"
+                              value={deleteInvoicePin}
+                              autoFocus
+                              onChange={e => {
+                                const v = e.target.value.replace(/\D/g, '').slice(0, 4);
+                                setDeleteInvoicePin(v);
+                              }}
+                              className="w-36 px-3 py-2 border-2 border-amber-400 bg-white rounded-lg outline-none focus:ring-2 focus:ring-amber-400 font-mono text-center text-lg tracking-widest"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => { setPinUnlocked(false); }}
+                              className="text-xs text-slate-500 hover:text-red-600 underline"
+                            >
+                              Cancelar
+                            </button>
+                            {deleteInvoicePin.length === 4 && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-1 rounded-lg">✓ Listo — guarda los cambios</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPinUnlocked(false);
+                                    setPinAuthOpen(true);
+                                    setPinAuthPassword('');
+                                    setPinAuthShowPw(false);
+                                  }}
+                                  className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs font-semibold hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 transition-colors"
+                                >
+                                  <KeyRound size={12} />
+                                  Cambiar PIN
+                                </button>
+                              </div>
+                            )}
+                            {deleteInvoicePin.length === 0 && (
+                              <span className="text-xs text-slate-500">Dejar vacío = sin PIN</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1055,6 +1149,71 @@ const Settings: React.FC = () => {
                 })}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: Verificar contraseña para editar PIN de facturas ── */}
+      {pinAuthOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-amber-600 to-orange-600 p-5 text-center">
+              <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                <ShieldCheck size={28} className="text-white" />
+              </div>
+              <h3 className="text-white font-bold text-lg">Verificación de Identidad</h3>
+              <p className="text-white/80 text-xs mt-1">
+                Para modificar el PIN de facturas, confirma tu contraseña de acceso al sistema
+              </p>
+            </div>
+            {/* Body */}
+            <form onSubmit={handlePinAuth} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  Tu contraseña de acceso
+                </label>
+                <div className="relative">
+                  <input
+                    type={pinAuthShowPw ? 'text' : 'password'}
+                    autoFocus
+                    value={pinAuthPassword}
+                    onChange={e => setPinAuthPassword(e.target.value)}
+                    placeholder="Ingresa tu contraseña..."
+                    className="w-full px-4 py-2.5 pr-10 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-amber-400 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPinAuthShowPw(p => !p)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {pinAuthShowPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400 mt-1.5">
+                  Esta es la misma contraseña con la que iniciaste sesión.
+                </p>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setPinAuthOpen(false); setPinAuthPassword(''); }}
+                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-lg font-semibold text-sm hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={pinAuthLoading || !pinAuthPassword}
+                  className="flex-1 py-2.5 bg-amber-600 text-white rounded-lg font-bold text-sm hover:bg-amber-700 disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {pinAuthLoading
+                    ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Verificando...</>
+                    : <><ShieldCheck size={15} /> Verificar</>
+                  }
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
