@@ -295,6 +295,45 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
 
     if (invErr) throw invErr;
 
+    // ── Guardar/actualizar cliente en tabla customers ──────────────────────
+    const customerName = saleData.customer?.trim();
+    if (customerName && customerName.toLowerCase() !== 'consumidor final') {
+      try {
+        const customerDoc = saleData.customerDoc?.trim() || null;
+        // Check if customer already exists (by document or name)
+        const matchField = customerDoc ? 'document_number' : 'name';
+        const matchValue = customerDoc || customerName;
+        const { data: existing } = await supabase
+          .from('customers')
+          .select('id, phone, email')
+          .eq('company_id', companyId)
+          .eq(matchField, matchValue)
+          .maybeSingle();
+
+        if (existing) {
+          // Update phone/email if missing
+          const updates: any = {};
+          if (!existing.phone && saleData.customerPhone) updates.phone = saleData.customerPhone;
+          if (!existing.email && saleData.customerEmail) updates.email = saleData.customerEmail;
+          if (Object.keys(updates).length > 0) {
+            await supabase.from('customers').update(updates).eq('id', existing.id);
+          }
+        } else {
+          // Insert new customer
+          await supabase.from('customers').insert({
+            company_id:      companyId,
+            name:            customerName,
+            document_number: customerDoc,
+            phone:           saleData.customerPhone?.trim() || null,
+            email:           saleData.customerEmail?.trim() || null,
+          });
+        }
+      } catch (e) {
+        // Non-critical — don't fail the sale if customer upsert fails
+        console.warn('⚠️ Customer upsert failed:', e);
+      }
+    }
+
     // Solo insertar items con product_id real (UUID válido, no ids virtuales de zapatería/salón)
     const realItems = saleData.items.filter((i: any) =>
       !String(i.product.id).startsWith('shoe-') &&
