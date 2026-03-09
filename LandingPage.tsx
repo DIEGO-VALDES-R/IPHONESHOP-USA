@@ -1224,31 +1224,42 @@ export const ClientPortal: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   };
 
   const buildResults = (invoiceData: any[], shoeData: any[]) => {
-    const invoices = invoiceData.map((r: any) => ({
-      ...r,
-      _type:  'invoice',
-      _label: 'Factura POS',
-      client_name:    r.customer_name || r.payment_method?.customer_name || '—',
-      total:          r.total_amount,
-      amount_paid:    parseFloat(r.amount_paid_str || r.payment_method?.amount || '0'),
-      balance_due:    Math.max(0, (r.total_amount || 0) - parseFloat(r.amount_paid_str || r.payment_method?.amount || '0')),
-      payment_status: r.payment_status || r.payment_method?.payment_status || 'PENDING_ELECTRONIC',
-      service:        (r.virtual_items || r.payment_method?.virtual_items || []).map((v: any) => v.name).join(', ') || '—',
-    }));
+    const invoices = invoiceData.map((r: any) => {
+      const pm = r.payment_method || {};
+      const virtualItems = (pm.virtual_items || []).map((v: any) => v.name).filter(Boolean);
+      const service = virtualItems.length > 0
+        ? virtualItems.join(', ')
+        : pm.method === 'CASH' ? 'Venta en efectivo' : pm.method || 'Venta POS';
+      return {
+        ...r,
+        _type:  'invoice',
+        _label: 'Factura POS',
+        client_name:    pm.customer_name || '—',
+        total:          r.total_amount,
+        amount_paid:    pm.amount || r.total_amount || 0,
+        balance_due:    pm.balance_due ?? Math.max(0, (r.total_amount || 0) - (pm.amount || 0)),
+        payment_status: pm.payment_status || 'PAID',
+        service,
+      };
+    });
 
     const shoeMap = new Map(shoeData.map((r: any) => [r.id, r]));
-    const shoeItems = Array.from(shoeMap.values()).map((r: any) => ({
-      ...r,
-      _type:          'shoe',
-      _label:         'Reparación Calzado',
-      invoice_number: r.ticket_number || r.id?.slice(0, 8).toUpperCase(),
-      total:          r.estimated_price || 0,
-      amount_paid:    r.deposit_amount  || 0,
-      balance_due:    Math.max(0, (r.estimated_price || 0) - (r.deposit_amount || 0)),
-      payment_status: r.status === 'DELIVERED' ? 'PAID' : (r.deposit_amount > 0) ? 'PARTIAL' : 'PENDING',
-      service:        r.service_type || '—',
-      client_name:    r.client_name  || '—',
-    }));
+    const shoeItems = Array.from(shoeMap.values()).map((r: any) => {
+      const isDelivered = r.status === 'DELIVERED';
+      const balance = isDelivered ? 0 : Math.max(0, (r.estimated_price || 0) - (r.deposit_amount || 0));
+      return {
+        ...r,
+        _type:          'shoe',
+        _label:         'Reparación Calzado',
+        invoice_number: r.ticket_number || r.id?.slice(0, 8).toUpperCase(),
+        total:          r.estimated_price || 0,
+        amount_paid:    isDelivered ? (r.estimated_price || 0) : (r.deposit_amount || 0),
+        balance_due:    balance,
+        payment_status: isDelivered ? 'PAID' : (r.deposit_amount > 0) ? 'PARTIAL' : 'PENDING',
+        service:        r.service_type || '—',
+        client_name:    r.client_name  || '—',
+      };
+    });
 
     const all = [...invoices, ...shoeItems].sort((a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
