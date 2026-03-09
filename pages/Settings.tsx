@@ -26,6 +26,7 @@ const BUSINESS_TYPES = [
   { id: 'supermercado',      label: '🛒 Supermercado / Abarrotes' },
   { id: 'salon',             label: '💇 Salón de Belleza / Spa' },
   { id: 'odontologia',       label: '🦷 Consultorio Odontológico' },
+  { id: 'veterinaria',       label: '🐾 Clínica Veterinaria' },
   { id: 'otro',              label: '📦 Otro' },
 ];
 
