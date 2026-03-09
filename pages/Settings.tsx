@@ -28,7 +28,6 @@ const BUSINESS_TYPES = [
   { id: 'salon',             label: '💇 Salón de Belleza / Spa' },
   { id: 'odontologia',       label: '🦷 Consultorio Odontológico' },
   { id: 'veterinaria',       label: '🐾 Clínica Veterinaria' },
-  { id: 'farmacia',          label: '💊 Farmacia / Droguería' },
   { id: 'otro',              label: '📦 Otro' },
 ];
 
