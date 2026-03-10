@@ -21,7 +21,7 @@ export const LandingPage: React.FC<{ onLogin: () => void; onRegister: () => void
     { id: 'TRIAL', name: 'Prueba Gratis', price: 'Gratis', period: '7 días', color: '#10b981', badge: '🎁 Sin tarjeta', features: ['Acceso completo 7 días', 'POS Completo', 'Inventario', 'Control de Caja', 'Servicio Técnico', 'Sin compromiso'], cta: 'Probar Gratis' },
     { id: 'BASIC', name: 'Basic', price: '$65.000', period: '/mes', color: '#64748b', features: ['1 Negocio', 'POS Completo', 'Inventario Ilimitado', 'Control de Caja', 'Servicio Técnico', 'Cartera / CxC', '1 sucursal · 1 usuario admin', 'Soporte por WhatsApp'], cta: 'Comenzar' },
     { id: 'PRO', name: 'Pro', price: '$120.000', period: '/mes', color: '#3b82f6', badge: '⭐ Más popular', features: ['Todo lo del Basic', 'Hasta 3 sucursales', 'Hasta 5 usuarios', 'Roles y permisos', 'PIN de acceso rápido', 'Dashboard multi-sucursal', 'Soporte Prioritario'], cta: 'Comenzar Ahora', popular: true },
-    { id: 'ENTERPRISE', name: 'Enterprise', price: '$249.900', period: '/mes', color: '#8b5cf6', badge: '🏢 Para grandes negocios', features: ['Todo lo del Pro', 'Sucursales ilimitadas', 'Usuarios ilimitados', 'Facturación electrónica DIAN', 'API + Webhooks', 'Gerente de cuenta dedicado', 'SLA 99.9% uptime', 'Soporte Dedicado'], cta: 'Contactar Ventas', enterprise: true },
+    { id: 'ENTERPRISE', name: 'Enterprise', price: '$249.900', period: '/mes', color: '#8b5cf6', badge: '🏢 Para grandes negocios', features: ['Todo lo del Pro', 'Sucursales ilimitadas', 'Usuarios ilimitados', 'Facturación electrónica y convencional', 'API + Webhooks', 'Gerente de cuenta dedicado', 'SLA 99.9% uptime', 'Soporte Dedicado'], cta: 'Contactar Ventas', enterprise: true },
   ];
 
   const features = [
@@ -158,7 +158,7 @@ export const LandingPage: React.FC<{ onLogin: () => void; onRegister: () => void
                 { feature: 'Roles y permisos', basic: '❌', pro: '✅', enterprise: '✅' },
                 { feature: 'PIN de acceso rápido', basic: '❌', pro: '✅', enterprise: '✅' },
                 { feature: 'Dashboard multi-sucursal', basic: '❌', pro: '✅', enterprise: '✅' },
-                { feature: 'Facturación electrónica DIAN', basic: '❌', pro: '❌', enterprise: '✅' },
+                { feature: 'Facturación electrónica y convencional', basic: '❌', pro: '❌', enterprise: '✅' },
                 { feature: 'API + Webhooks', basic: '❌', pro: '❌', enterprise: '✅' },
                 { feature: 'Gerente de cuenta dedicado', basic: '❌', pro: '❌', enterprise: '✅' },
                 { feature: 'Métodos de pago del negocio', basic: '✅', pro: '✅', enterprise: '✅' },
@@ -315,7 +315,7 @@ export const RegisterPage: React.FC<{ onBack: () => void; onSuccess: () => void 
               { id: 'TRIAL',      icon: '🎁', name: '7 días gratis',     price: 'Gratis',          desc: 'Prueba completa sin tarjeta',                  color: '#10b981', border: 'rgba(16,185,129,0.4)' },
               { id: 'BASIC',      icon: '📦', name: 'Basic',             price: '$65.000/mes',     desc: '1 sucursal · 1 usuario · POS completo',        color: '#64748b', border: 'rgba(100,116,139,0.4)' },
               { id: 'PRO',        icon: '⭐', name: 'Pro',               price: '$120.000/mes',    desc: 'Hasta 3 sucursales · 5 usuarios · Wompi',      color: '#3b82f6', border: 'rgba(59,130,246,0.5)',  popular: true },
-              { id: 'ENTERPRISE', icon: '🏢', name: 'Enterprise',        price: '$249.900/mes',    desc: 'Ilimitado · DIAN · API · Soporte dedicado',    color: '#8b5cf6', border: 'rgba(139,92,246,0.5)' },
+              { id: 'ENTERPRISE', icon: '🏢', name: 'Enterprise',        price: '$249.900/mes',    desc: 'Ilimitado · Facturación electrónica y convencional · API · Soporte dedicado',    color: '#8b5cf6', border: 'rgba(139,92,246,0.5)' },
             ].map(p => (
               <button key={p.id} onClick={() => { setForm(prev => ({ ...prev, plan: p.id })); setStep(1); }}
                 style={{
