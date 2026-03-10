@@ -35,12 +35,21 @@ function getNavItems(
 ) {
   const p = (key: string) => hasPermission(key) || isAdmin;
   const type = businessType || 'general';
+  const isRest  = ['restaurante', 'restaurant', 'cocina', 'cafeteria'].includes(type);
+  const invLabel =
+    isRest                               ? 'Insumos Cocina'   :
+    type === 'zapateria'                 ? 'Materiales'       :
+    type === 'salon' || type === 'salón' ? 'Insumos Salón'    :
+    type === 'farmacia'                  ? 'Insumos'          :
+    type === 'veterinaria'               ? 'Insumos Vet'      :
+    type === 'odontologia'               ? 'Insumos Dental'   :
+    'Inventario';
 
   const items = [
     { label: 'Dashboard',          path: '/',             icon: LayoutDashboard, show: true },
     { label: 'Punto de Venta',     path: '/pos',          icon: ShoppingCart,    show: p('can_sell') },
     { label: 'Control de Caja',    path: '/cash-control', icon: Landmark,        show: p('can_open_cash') },
-    { label: 'Inventario',         path: '/inventory',    icon: Package,         show: p('can_manage_inventory') },
+    { label: invLabel,             path: '/inventory',    icon: Package,         show: p('can_manage_inventory') },
     { label: 'Historial Facturas', path: '/invoices',     icon: Receipt,         show: p('can_view_reports') },
     { label: 'Clientes',           path: '/customers',    icon: UserRound,       show: p('can_view_reports') },
   ];

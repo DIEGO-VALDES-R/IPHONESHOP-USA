@@ -89,6 +89,20 @@ const EMPTY_BEV: Omit<Beverage,'company_id'|'id'> = {
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n);
 
+// ── Modal wrapper — definido FUERA del componente para evitar re-creación en cada render
+// (si se define dentro, React lo destruye y re-crea en cada keystroke, perdiendo el foco)
+const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background:'rgba(0,0,0,0.5)' }}>
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div className="flex items-center justify-between px-5 py-4 border-b">
+        <h3 className="font-bold text-slate-800 text-base">{title}</h3>
+        <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg"><X size={16}/></button>
+      </div>
+      <div className="p-5 space-y-4 text-slate-800">{children}</div>
+    </div>
+  </div>
+);
+
 // ── COMPONENT ──────────────────────────────────────────────────────────────────
 
 const KitchenDisplay: React.FC = () => {
@@ -319,6 +333,50 @@ const KitchenDisplay: React.FC = () => {
     toast.success('Bebida eliminada'); loadBeverages();
   };
 
+  // ── Agregar bebida como plato del menú ──────────────────────────────────────
+  const addBeverageToMenu = async (bev: Beverage) => {
+    if (!companyId) return;
+    // Buscar o crear categoría "Bebidas" en el menú
+    let catId: string | null = null;
+    const { data: existingCat } = await supabase
+      .from('rest_menu_categories')
+      .select('id')
+      .eq('company_id', companyId)
+      .ilike('name', 'bebidas')
+      .maybeSingle();
+    if (existingCat) {
+      catId = existingCat.id;
+    } else {
+      const { data: newCat } = await supabase
+        .from('rest_menu_categories')
+        .insert({ company_id: companyId, name: 'Bebidas', icon: '🥤', menu_type: 'regular', sort_order: 99, available_days: [...DAYS], is_active: true })
+        .select('id').single();
+      catId = newCat?.id || null;
+    }
+    // Verificar si ya existe en el menú
+    const { data: existing } = await supabase
+      .from('rest_menu_items')
+      .select('id')
+      .eq('company_id', companyId)
+      .ilike('name', bev.name)
+      .maybeSingle();
+    if (existing) { toast.error(`"${bev.name}" ya está en el menú`); return; }
+    const { error } = await supabase.from('rest_menu_items').insert({
+      company_id: companyId,
+      category_id: catId,
+      name: `${bev.name} (${bev.presentation})`,
+      description: `${bev.category} · ${bev.presentation}`,
+      price: bev.price,
+      cost: bev.cost,
+      prep_time_min: 1,
+      is_available: true,
+      is_active: true,
+      tags: ['bebida'],
+    });
+    if (error) { toast.error(error.message); return; }
+    toast.success(`✅ "${bev.name}" agregada al menú del día`);
+  };
+
   const saveStockEntry = async () => {
     if (!stockEntry.beverage_id || stockEntry.quantity <= 0) {
       toast.error('Selecciona una bebida y cantidad mayor a 0'); return;
@@ -355,19 +413,6 @@ const KitchenDisplay: React.FC = () => {
   const labelCls = "block text-xs font-semibold text-slate-600 mb-1";
   const btnPrimary = "px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-semibold text-sm transition-all";
   const btnSecondary = "px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-sm transition-all";
-
-  // ── Modal wrapper ──
-  const Modal = ({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background:'rgba(0,0,0,0.5)' }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b">
-          <h3 className="font-bold text-slate-800 text-base">{title}</h3>
-          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg"><X size={16}/></button>
-        </div>
-        <div className="p-5 space-y-4 text-slate-800">{children}</div>
-      </div>
-    </div>
-  );
 
   // ── counts
   const counts = {
@@ -761,6 +806,12 @@ const KitchenDisplay: React.FC = () => {
                         <p className="text-slate-400 text-xs">{bev.category} · {bev.presentation}</p>
                       </div>
                       <div className="flex gap-1">
+                        <button
+                          onClick={() => addBeverageToMenu(bev)}
+                          title="Agregar esta bebida al menú del día"
+                          className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-green-400 transition-all">
+                          <BookOpen size={13}/>
+                        </button>
                         <button onClick={() => { setEditingBev(bev); setBevForm({ name:bev.name, category:bev.category, presentation:bev.presentation, price:bev.price, cost:bev.cost, stock:bev.stock, stock_min:bev.stock_min, barcode:bev.barcode||'', is_active:bev.is_active }); setShowBevModal(true); }}
                           className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-orange-400 transition-all">
                           <Pencil size={13}/>
@@ -784,6 +835,13 @@ const KitchenDisplay: React.FC = () => {
                         {isLow && <p className="text-amber-400 text-[10px] mt-0.5 font-semibold">⚠ Stock bajo (mín {bev.stock_min})</p>}
                       </div>
                       <span className="text-orange-400 font-bold text-sm">{fmt(bev.price)}</span>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-slate-700/50">
+                      <button
+                        onClick={() => addBeverageToMenu(bev)}
+                        className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-green-900/30 hover:bg-green-900/60 text-green-400 text-xs font-semibold transition-all">
+                        <BookOpen size={11}/> Agregar al menú del día
+                      </button>
                     </div>
                   </div>
                 );

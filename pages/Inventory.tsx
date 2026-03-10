@@ -3,6 +3,7 @@ import { Plus, Search, Edit2, Trash2, X, Package, Upload, Image as ImageIcon, Ch
 import { useCurrency } from '../contexts/CurrencyContext';
 import { productService, Product } from '../services/productService';
 import { useCompany } from '../hooks/useCompany';
+import { useDatabase } from '../contexts/DatabaseContext';
 import { supabase } from '../supabaseClient';
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner';
 import toast from 'react-hot-toast';
@@ -11,7 +12,7 @@ const EMPTY_PRODUCT = {
   company_id: '', name: '', sku: '', category: '', brand: '',
   description: '', price: 0, cost: 0, tax_rate: 19,
   stock_min: 5, stock_quantity: 0, type: 'STANDARD' as const, is_active: true,
-  image_url: '', supplier_id: '',
+  image_url: '', supplier_id: '', business_context: 'general',
 };
 
 const numVal = (val: number | undefined | null, fallback = 0): string => {
@@ -631,6 +632,50 @@ const SuppliersTab: React.FC<{ companyId: string }> = ({ companyId }) => {
 const Inventory: React.FC = () => {
   const { formatMoney } = useCurrency();
   const { companyId } = useCompany();
+  const { company } = useDatabase();
+
+  // Detectar tipo de negocio para adaptar etiquetas y mensajes
+  const cfg = (company?.config as any) || {};
+  const businessTypes: string[] = Array.isArray(cfg.business_types)
+    ? cfg.business_types
+    : cfg.business_type ? [cfg.business_type] : ['general'];
+  const isRestaurante  = businessTypes.some(t => ['restaurante', 'restaurant', 'cocina', 'cafeteria'].includes(t));
+  const isZapateria    = businessTypes.includes('zapateria');
+  const isSalon        = businessTypes.some(t => ['salon', 'salón', 'belleza'].includes(t));
+  const isFarmacia     = businessTypes.includes('farmacia');
+  const isVeterinaria  = businessTypes.includes('veterinaria');
+  const isOdontologia  = businessTypes.includes('odontologia');
+  // Negocios con módulo propio que no usan el inventario genérico para vender
+  const hasOwnInventory = isFarmacia; // Farmacia tiene pharma_medications
+  const isServiceOnly   = isVeterinaria || isOdontologia; // Solo servicios, sin inventario físico propio
+
+  // Contexto activo: qué tipo de insumos/productos pertenecen a este negocio
+  const currentBusinessContext =
+    isRestaurante ? 'restaurante' :
+    isZapateria   ? 'zapateria'   :
+    isSalon       ? 'salon'       :
+    isFarmacia    ? 'farmacia'    :
+    isVeterinaria ? 'veterinaria' :
+    isOdontologia ? 'odontologia' :
+    'general';
+
+  const inventoryLabel =
+    isRestaurante  ? '🥣 Insumos de Cocina'       :
+    isZapateria    ? '🧵 Materiales e Insumos'      :
+    isSalon        ? '💆 Insumos del Salón'         :
+    isFarmacia     ? '🧴 Insumos y Materiales'      :
+    isVeterinaria  ? '🧪 Insumos y Materiales Vet'  :
+    isOdontologia  ? '🧪 Insumos y Materiales Dental' :
+    '📦 Inventario de Productos';
+
+  const inventoryDescription =
+    isRestaurante  ? 'Ingredientes e insumos de cocina. Los platos y bebidas del menú se administran en Display Cocina.' :
+    isZapateria    ? 'Materiales, pegantes, tintes e insumos para el taller.' :
+    isSalon        ? 'Tintes, cremas, productos químicos e insumos del salón.' :
+    isFarmacia     ? 'Insumos no-farmacológicos: bolsas, guantes, tapabocas, elementos de aseo, etc. Los medicamentos se gestionan en el módulo Farmacia.' :
+    isVeterinaria  ? 'Materiales y suministros del consultorio: guantes, jeringas, gasas, etc. Los servicios se gestionan en el módulo Veterinaria.' :
+    isOdontologia  ? 'Materiales e insumos del consultorio: guantes, gasas, materiales dentales, etc. Los servicios se gestionan en el módulo Odontología.' :
+    'Productos para la venta con control de stock, precios y proveedores.';
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -688,7 +733,9 @@ const Inventory: React.FC = () => {
 
   const openCreate = () => {
     loadSuppliers();
-    setEditing(null); setForm({ ...EMPTY_PRODUCT, company_id: companyId || '' }); setShowModal(true);
+    setEditing(null);
+    setForm({ ...EMPTY_PRODUCT, company_id: companyId || '', business_context: currentBusinessContext });
+    setShowModal(true);
   };
   const openEdit = (p: Product) => {
     loadSuppliers();
@@ -735,6 +782,15 @@ const Inventory: React.FC = () => {
   };
 
   const filtered = products.filter(p => {
+    // Filtrar por contexto de negocio:
+    // - Productos con business_context NULL o 'general' son visibles en negocios 'general'
+    // - Para otros tipos, solo mostrar los del mismo contexto
+    const ctx = (p as any).business_context || 'general';
+    const contextMatch = currentBusinessContext === 'general'
+      ? ctx === 'general'
+      : ctx === currentBusinessContext || ctx === 'general' && false; // estricto: solo el propio contexto
+    if (!contextMatch) return false;
+
     if (p.type !== 'SERVICE' && (p.stock_quantity ?? 0) <= 0) return false;
     return (
       p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -839,8 +895,8 @@ const Inventory: React.FC = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Inventario</h2>
-          <p className="text-slate-500">Gestión de productos y stock</p>
+          <h2 className="text-2xl font-bold text-slate-800">{inventoryLabel}</h2>
+          <p className="text-slate-500 text-sm max-w-xl">{inventoryDescription}</p>
         </div>
         <div className="flex gap-2">
           {lowStockCount > 0 && (
@@ -857,7 +913,13 @@ const Inventory: React.FC = () => {
           </button>
           <button onClick={openCreate}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm">
-            <Plus size={16} /> Nuevo Producto
+            <Plus size={16} /> {
+              isRestaurante                      ? 'Nuevo Insumo' :
+              isZapateria || isSalon             ? 'Nuevo Material' :
+              isFarmacia                         ? 'Nuevo Insumo General' :
+              isVeterinaria || isOdontologia     ? 'Nuevo Insumo' :
+              'Nuevo Producto'
+            }
           </button>
           {scannedProduct && showBarcodeNotification && (
             <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border-2 border-green-400 rounded-lg">
@@ -868,11 +930,51 @@ const Inventory: React.FC = () => {
         </div>
       </div>
 
+      {/* Banner contextual para tipos especiales */}
+      {(isRestaurante || isFarmacia || isVeterinaria || isOdontologia) && (
+        <div className={`flex items-start gap-3 p-4 rounded-xl border ${
+          isRestaurante ? 'bg-orange-50 border-orange-200' :
+          isFarmacia    ? 'bg-teal-50 border-teal-200' :
+          'bg-blue-50 border-blue-200'
+        }`}>
+          <span className="text-2xl">
+            {isRestaurante ? '👨‍🍳' : isFarmacia ? '💊' : isVeterinaria ? '🐾' : '🦷'}
+          </span>
+          <div>
+            <p className={`font-semibold text-sm ${
+              isRestaurante ? 'text-orange-800' : isFarmacia ? 'text-teal-800' : 'text-blue-800'
+            }`}>
+              {isRestaurante ? 'Aquí van los insumos de cocina, no los platos del menú'  :
+               isFarmacia    ? 'Aquí van insumos no-farmacológicos (bolsas, guantes, tapabocas...)' :
+               isVeterinaria ? 'Aquí van materiales del consultorio (guantes, jeringas, gasas...)' :
+                               'Aquí van materiales e insumos del consultorio dental'}
+            </p>
+            <p className={`text-xs mt-1 ${
+              isRestaurante ? 'text-orange-600' : isFarmacia ? 'text-teal-600' : 'text-blue-600'
+            }`}>
+              {isRestaurante
+                ? '👉 Los platos y bebidas se crean en Display Cocina → Menú / Bebidas.'
+                : isFarmacia
+                ? '👉 Los medicamentos con lotes, vencimientos y recetas se gestionan en el módulo Farmacia.'
+                : isVeterinaria
+                ? '👉 Los servicios, tarifas e historia clínica se gestionan en el módulo Veterinaria.'
+                : '👉 Los servicios, tarifas e historia clínica se gestionan en el módulo Odontología.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* PESTAÑAS */}
       <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
         <button onClick={() => setActiveTab('products')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${activeTab === 'products' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-          <Package size={16} /> Productos
+          <Package size={16} /> {
+            isRestaurante                    ? 'Insumos' :
+            isZapateria || isSalon           ? 'Materiales' :
+            isFarmacia                       ? 'Insumos generales' :
+            isVeterinaria || isOdontologia   ? 'Insumos y Materiales' :
+            'Productos'
+          }
         </button>
         <button onClick={() => setActiveTab('suppliers')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm transition-all ${activeTab === 'suppliers' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>

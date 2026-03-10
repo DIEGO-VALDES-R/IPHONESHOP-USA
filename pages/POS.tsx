@@ -1,5 +1,5 @@
-﻿import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Smartphone, X, Printer, Barcode, Zap, Tag } from 'lucide-react';
+﻿import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, Smartphone, X, Printer, Barcode, Zap, Tag, ChefHat, Beer, UtensilsCrossed } from 'lucide-react';
 import RefreshButton from '../components/RefreshButton';
 import { Product, ProductType, CartItem, PaymentMethod, Sale } from '../types';
 import { toast, Toaster } from 'react-hot-toast';
@@ -8,6 +8,7 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner';
 import InvoiceModal from '../components/InvoiceModal';
+import { supabase } from '../supabaseClient';
 
 const POS: React.FC = () => {
   const { formatMoney } = useCurrency();
@@ -117,19 +118,149 @@ const POS: React.FC = () => {
     }
   });
 
-  // Para zapatería: mostrar solo servicios (no insumos del inventario)
+  // ── Detectar tipo de negocio ──────────────────────────────────────────────
   const businessTypes: string[] = Array.isArray((company?.config as any)?.business_types)
     ? (company?.config as any).business_types
     : (company?.config as any)?.business_type ? [(company?.config as any).business_type] : ['general'];
-  const isZapateria = businessTypes.includes('zapateria');
 
-  const filteredProducts = useMemo(() =>
-    products.filter(p => {
-      if (isZapateria && p.type !== 'SERVICE') return false; // Zapatería: solo servicios
+  const isZapateria    = businessTypes.includes('zapateria');
+  const isRestaurante  = businessTypes.some(t => ['restaurante', 'restaurant', 'cocina', 'cafeteria'].includes(t));
+  const isFarmacia     = businessTypes.includes('farmacia');
+  const isVeterinaria  = businessTypes.includes('veterinaria');
+  const isOdontologia  = businessTypes.includes('odontologia');
+  const isSalon        = businessTypes.some(t => ['salon', 'salón', 'belleza'].includes(t));
+  // Negocios que venden servicios propios (no inventario genérico de products)
+  const isServiceBusiness = isZapateria || isSalon || isVeterinaria || isOdontologia;
+
+  // ── Estado para menú de restaurante ──────────────────────────────────────
+  const [menuItems,  setMenuItems]  = useState<any[]>([]);
+  const [beverages,  setBeverages]  = useState<any[]>([]);
+  const [menuTab,    setMenuTab]    = useState<'platos' | 'bebidas'>('platos');
+
+  // ── Estado para farmacia ──────────────────────────────────────────────────
+  const [pharmaMeds,    setPharmaMeds]    = useState<any[]>([]);
+  const [pharmaLoading, setPharmaLoading] = useState(false);
+
+  // ── Estado para veterinaria / odontología ─────────────────────────────────
+  const [specialtyServices, setSpecialtyServices] = useState<any[]>([]);
+
+  const loadRestaurantMenu = useCallback(async () => {
+    if (!company?.id || !isRestaurante) return;
+    const [menuRes, bevRes] = await Promise.all([
+      supabase.from('rest_menu_items').select('*, rest_menu_categories(name,icon)').eq('company_id', company.id).eq('is_active', true).eq('is_available', true).order('name'),
+      supabase.from('rest_beverages').select('*').eq('company_id', company.id).eq('is_active', true).order('name'),
+    ]);
+    if (menuRes.data) setMenuItems(menuRes.data);
+    if (bevRes.data)  setBeverages(bevRes.data);
+  }, [company?.id, isRestaurante]);
+
+  const loadPharmaMeds = useCallback(async () => {
+    if (!company?.id || !isFarmacia) return;
+    setPharmaLoading(true);
+    const { data } = await supabase
+      .from('pharma_medications')
+      .select('*')
+      .eq('company_id', company.id)
+      .eq('is_active', true)
+      .gt('stock_total', 0)
+      .order('name');
+    if (data) setPharmaMeds(data);
+    setPharmaLoading(false);
+  }, [company?.id, isFarmacia]);
+
+  const loadSpecialtyServices = useCallback(async () => {
+    if (!company?.id || (!isVeterinaria && !isOdontologia && !isSalon)) return;
+    const table = isVeterinaria ? 'vet_servicios' : isOdontologia ? 'odonto_servicios' : 'salon_servicios';
+    const { data } = await supabase
+      .from(table)
+      .select('*')
+      .eq('company_id', company.id)
+      .eq('activo', true)
+      .order('nombre');
+    if (data) setSpecialtyServices(data);
+  }, [company?.id, isVeterinaria, isOdontologia, isSalon]);
+
+  useEffect(() => { loadRestaurantMenu(); }, [loadRestaurantMenu]);
+  useEffect(() => { loadPharmaMeds(); }, [loadPharmaMeds]);
+  useEffect(() => { loadSpecialtyServices(); }, [loadSpecialtyServices]);
+
+  // ── Catálogo filtrado según tipo de negocio ───────────────────────────────
+  const filteredProducts = useMemo(() => {
+    // Estos negocios no usan la tabla `products` para vender en el POS
+    if (isRestaurante || isFarmacia || isVeterinaria || isOdontologia || isSalon) return [];
+    return products.filter(p => {
+      if (isZapateria && p.type !== 'SERVICE') return false;
       return ((p.stock_quantity ?? 0) > 0 || p.type === 'SERVICE') &&
         (p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
          p.sku.toLowerCase().includes(searchTerm.toLowerCase()));
-    }), [searchTerm, products, isZapateria]);
+    });
+  }, [searchTerm, products, isZapateria, isRestaurante, isFarmacia, isVeterinaria, isOdontologia, isSalon]);
+
+  // Listas filtradas para restaurante
+  const filteredMenuItems = useMemo(() =>
+    menuItems.filter(i => !searchTerm || i.name.toLowerCase().includes(searchTerm.toLowerCase())),
+    [menuItems, searchTerm]);
+  const filteredBeverages = useMemo(() =>
+    beverages.filter(b => !searchTerm || b.name.toLowerCase().includes(searchTerm.toLowerCase())),
+    [beverages, searchTerm]);
+
+  // Medicamentos filtrados para farmacia
+  const filteredPharmaMeds = useMemo(() =>
+    pharmaMeds.filter(m =>
+      !searchTerm ||
+      m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.sku || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.barcode || '').includes(searchTerm)
+    ), [pharmaMeds, searchTerm]);
+
+  // Servicios filtrados para veterinaria/odontología/salón
+  const filteredSpecialtyServices = useMemo(() =>
+    specialtyServices.filter(s =>
+      !searchTerm || s.nombre.toLowerCase().includes(searchTerm.toLowerCase())
+    ), [specialtyServices, searchTerm]);
+
+  // ── Helpers para agregar al carrito ──────────────────────────────────────
+  const addMenuItemToCart = (item: any) => {
+    if (session?.status !== 'OPEN') { toast.error('Debe abrir la caja primero'); return; }
+    const vp: any = { id: `menu-${item.id}`, name: item.name, price: item.price, type: 'SERVICE', sku: `MENU-${item.id.slice(0,6)}`, stock_quantity: 999, tax_rate: 0 };
+    const existing = cart.find(c => c.product.id === vp.id);
+    if (existing) setCart(cart.map(c => c.product.id === vp.id ? { ...c, quantity: c.quantity + 1 } : c));
+    else setCart([...cart, { product: vp, quantity: 1, price: item.price, tax_rate: 0, discount: 0 }]);
+    toast.success(`${item.name} agregado`);
+  };
+
+  const addBeverageToCart = (bev: any) => {
+    if (session?.status !== 'OPEN') { toast.error('Debe abrir la caja primero'); return; }
+    if (bev.stock <= 0) { toast.error('Bebida sin stock'); return; }
+    const vp: any = { id: `bev-${bev.id}`, name: `${bev.name} (${bev.presentation})`, price: bev.price, type: 'SERVICE', sku: `BEV-${bev.id.slice(0,6)}`, stock_quantity: bev.stock, tax_rate: 0 };
+    const existing = cart.find(c => c.product.id === vp.id);
+    if (existing) {
+      if (existing.quantity >= bev.stock) { toast.error('Stock insuficiente'); return; }
+      setCart(cart.map(c => c.product.id === vp.id ? { ...c, quantity: c.quantity + 1 } : c));
+    } else setCart([...cart, { product: vp, quantity: 1, price: bev.price, tax_rate: 0, discount: 0 }]);
+    toast.success(`${bev.name} agregado`);
+  };
+
+  const addPharmaToCart = (med: any) => {
+    if (session?.status !== 'OPEN') { toast.error('Debe abrir la caja primero'); return; }
+    if (med.stock_total <= 0) { toast.error('Sin stock'); return; }
+    const vp: any = { id: `pharma-${med.id}`, name: med.name, price: med.price, type: 'SERVICE', sku: med.sku || `PHARMA-${med.id.slice(0,6)}`, stock_quantity: med.stock_total, tax_rate: 0 };
+    const existing = cart.find(c => c.product.id === vp.id);
+    if (existing) {
+      if (existing.quantity >= med.stock_total) { toast.error('Stock insuficiente'); return; }
+      setCart(cart.map(c => c.product.id === vp.id ? { ...c, quantity: c.quantity + 1 } : c));
+    } else setCart([...cart, { product: vp, quantity: 1, price: med.price, tax_rate: 0, discount: 0 }]);
+    toast.success(`${med.name} agregado`);
+  };
+
+  const addSpecialtyServiceToCart = (svc: any) => {
+    if (session?.status !== 'OPEN') { toast.error('Debe abrir la caja primero'); return; }
+    const vp: any = { id: `svc-${svc.id}`, name: svc.nombre, price: svc.precio, type: 'SERVICE', sku: `SVC-${svc.id.slice(0,6)}`, stock_quantity: 999, tax_rate: 0 };
+    const existing = cart.find(c => c.product.id === vp.id);
+    if (existing) setCart(cart.map(c => c.product.id === vp.id ? { ...c, quantity: c.quantity + 1 } : c));
+    else setCart([...cart, { product: vp, quantity: 1, price: svc.precio, tax_rate: 0, discount: 0 }]);
+    toast.success(`${svc.nombre} agregado`);
+  };
 
   const totals = useMemo(() => {
     const subtotalBruto = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
@@ -279,14 +410,42 @@ const POS: React.FC = () => {
       <div className="flex-1 flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-200 bg-slate-50">
           <div className="flex gap-2 mb-2">
-            <RefreshButton onRefresh={refreshAll} label="Actualizar" className="text-xs px-2 py-1.5" />
+            <RefreshButton onRefresh={
+              isRestaurante ? loadRestaurantMenu :
+              isFarmacia    ? loadPharmaMeds :
+              isServiceBusiness ? loadSpecialtyServices :
+              refreshAll
+            } label="Actualizar" className="text-xs px-2 py-1.5" />
+            {/* Tabs para restaurante */}
+            {isRestaurante && (
+              <div className="flex gap-1 ml-auto bg-slate-200 rounded-lg p-0.5">
+                <button
+                  onClick={() => setMenuTab('platos')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${menuTab === 'platos' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                  <UtensilsCrossed size={14}/> Platos
+                </button>
+                <button
+                  onClick={() => setMenuTab('bebidas')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold transition-all ${menuTab === 'bebidas' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                  <Beer size={14}/> Bebidas
+                </button>
+              </div>
+            )}
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
             <input
               ref={searchInputRef}
               type="text"
-              placeholder="Escanear Codigo de Barras / SKU / IMEI..."
+              placeholder={
+                isRestaurante    ? 'Buscar plato o bebida...' :
+                isFarmacia       ? 'Buscar medicamento, SKU o código de barras...' :
+                isVeterinaria    ? 'Buscar servicio veterinario...' :
+                isOdontologia    ? 'Buscar servicio odontológico...' :
+                isSalon          ? 'Buscar servicio del salón...' :
+                isZapateria      ? 'Buscar servicio de zapatería...' :
+                'Escanear Código de Barras / SKU / IMEI...'
+              }
               className="w-full pl-10 pr-12 py-3 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
@@ -294,49 +453,198 @@ const POS: React.FC = () => {
               autoFocus
             />
             <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-              <Barcode size={20} />
+              {isRestaurante ? <ChefHat size={20}/> : isFarmacia ? <span className="text-base">💊</span> : isVeterinaria ? <span className="text-base">🐾</span> : isOdontologia ? <span className="text-base">🦷</span> : isSalon ? <span className="text-base">✂️</span> : <Barcode size={20} />}
             </div>
           </div>
         </div>
         <div className="flex-1 overflow-auto p-4">
-          {filteredProducts.length === 0 && searchTerm && (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <div className="text-slate-300 mb-4">
-                <ShoppingCart size={48} />
+
+          {/* ── CATÁLOGO RESTAURANTE ── */}
+          {isRestaurante && menuTab === 'platos' && (
+            <>
+              {filteredMenuItems.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-center text-slate-400">
+                  <ChefHat size={48} className="mb-2 opacity-20"/>
+                  <p className="font-medium">No hay platos disponibles</p>
+                  <p className="text-sm">Crea platos en Cocina → Menú</p>
+                </div>
+              )}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {filteredMenuItems.map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => addMenuItemToCart(item)}
+                    className="flex flex-col items-start text-left p-4 rounded-lg border border-slate-200 hover:border-orange-400 hover:shadow-md transition-all bg-white group"
+                  >
+                    <div className="w-full aspect-square bg-orange-50 rounded-md mb-3 flex items-center justify-center text-3xl group-hover:scale-110 transition-transform overflow-hidden">
+                      {item.image_url
+                        ? <img src={item.image_url} alt={item.name} className="w-full h-full object-cover"/>
+                        : (item.rest_menu_categories?.icon || '🍽️')}
+                    </div>
+                    <h4 className="font-semibold text-slate-800 line-clamp-2 text-sm">{item.name}</h4>
+                    {item.rest_menu_categories && (
+                      <p className="text-xs text-slate-400 mb-1">{item.rest_menu_categories.icon} {item.rest_menu_categories.name}</p>
+                    )}
+                    {item.description && <p className="text-xs text-slate-400 line-clamp-1 mb-1">{item.description}</p>}
+                    <div className="mt-auto flex items-center justify-between w-full">
+                      <span className="font-bold text-orange-600">{formatMoney(item.price)}</span>
+                      <span className="text-[10px] text-slate-400">⏱ {item.prep_time_min} min</span>
+                    </div>
+                  </button>
+                ))}
               </div>
-              <p className="text-slate-500 font-medium">No hay productos disponibles</p>
-              <p className="text-slate-400 text-sm">Intenta con otro término de búsqueda o verifica el stock</p>
-            </div>
+            </>
           )}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filteredProducts.map(product => (
-              <button
-                key={product.id}
-                onClick={() => addToCart(product)}
-                disabled={product.stock_quantity === 0 && product.type !== ProductType.SERVICE}
-                className="flex flex-col items-start text-left p-4 rounded-lg border border-slate-200 hover:border-blue-500 hover:shadow-md transition-all bg-white group disabled:opacity-50 disabled:bg-slate-50"
-              >
-                <div className="w-full aspect-square bg-slate-100 rounded-md mb-3 flex items-center justify-center text-slate-300 group-hover:text-blue-400 overflow-hidden">
-                  {(product as any).image_url ? (
-                    <img src={(product as any).image_url} alt={product.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <Smartphone size={40} />
-                  )}
+
+          {isRestaurante && menuTab === 'bebidas' && (
+            <>
+              {filteredBeverages.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-center text-slate-400">
+                  <Beer size={48} className="mb-2 opacity-20"/>
+                  <p className="font-medium">No hay bebidas disponibles</p>
+                  <p className="text-sm">Crea bebidas en Cocina → Bebidas</p>
                 </div>
-                <h4 className="font-semibold text-slate-800 line-clamp-2">{product.name}</h4>
-                <p className="text-xs text-slate-500 mb-1">{product.sku}</p>
-                <div className={`text-xs font-bold mb-2 ${product.stock_quantity === 0 ? 'text-red-500' : 'text-green-600'}`}>
-                  Stock: {product.stock_quantity}
+              )}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {filteredBeverages.map(bev => {
+                  const isLow = bev.stock <= bev.stock_min;
+                  return (
+                    <button
+                      key={bev.id}
+                      onClick={() => addBeverageToCart(bev)}
+                      disabled={bev.stock <= 0}
+                      className={`flex flex-col items-start text-left p-4 rounded-lg border transition-all bg-white group disabled:opacity-50 disabled:cursor-not-allowed ${
+                        bev.stock <= 0 ? 'border-red-200 bg-red-50' : isLow ? 'border-amber-300 hover:border-amber-400 hover:shadow-md' : 'border-slate-200 hover:border-blue-400 hover:shadow-md'
+                      }`}
+                    >
+                      <div className="w-full aspect-square bg-blue-50 rounded-md mb-3 flex items-center justify-center text-3xl group-hover:scale-110 transition-transform">
+                        🥤
+                      </div>
+                      <h4 className="font-semibold text-slate-800 line-clamp-2 text-sm">{bev.name}</h4>
+                      <p className="text-xs text-slate-400 mb-1">{bev.category} · {bev.presentation}</p>
+                      <div className={`text-xs font-bold mb-2 ${bev.stock <= 0 ? 'text-red-500' : isLow ? 'text-amber-500' : 'text-green-600'}`}>
+                        {bev.stock <= 0 ? 'Agotado' : `Stock: ${bev.stock}`}
+                        {isLow && bev.stock > 0 && ' ⚠️'}
+                      </div>
+                      <div className="mt-auto w-full">
+                        <span className="font-bold text-blue-600">{formatMoney(bev.price)}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* ── CATÁLOGO FARMACIA ── */}
+          {isFarmacia && (
+            <>
+              {pharmaLoading && <p className="text-slate-400 text-sm text-center py-8">Cargando medicamentos...</p>}
+              {!pharmaLoading && filteredPharmaMeds.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-center text-slate-400">
+                  <span className="text-5xl mb-2 opacity-30">💊</span>
+                  <p className="font-medium">No hay medicamentos con stock</p>
+                  <p className="text-sm">Registra medicamentos en el módulo de Farmacia</p>
                 </div>
-                <div className="mt-auto w-full flex justify-between items-center">
-                  <span className="font-bold text-blue-600">{formatMoney(product.price)}</span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${product.type === ProductType.SERIALIZED ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
-                    {product.type === ProductType.SERIALIZED ? 'IMEI' : 'STD'}
+              )}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {filteredPharmaMeds.map(med => (
+                  <button key={med.id} onClick={() => addPharmaToCart(med)}
+                    className="flex flex-col items-start text-left p-4 rounded-lg border border-slate-200 hover:border-teal-500 hover:shadow-md transition-all bg-white group">
+                    <div className="w-full aspect-square bg-teal-50 rounded-md mb-3 flex items-center justify-center text-4xl group-hover:scale-110 transition-transform">
+                      💊
+                    </div>
+                    <h4 className="font-semibold text-slate-800 line-clamp-2 text-sm">{med.name}</h4>
+                    <p className="text-xs text-slate-400 mb-1">{med.category} · {med.presentation}</p>
+                    {med.laboratory && <p className="text-xs text-slate-400 mb-1">{med.laboratory}</p>}
+                    <div className="text-xs font-bold mb-2 text-green-600">Stock: {med.stock_total}</div>
+                    <div className="mt-auto w-full flex justify-between items-center">
+                      <span className="font-bold text-teal-600">{formatMoney(med.price)}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${med.requires_prescription ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500'}`}>
+                        {med.requires_prescription ? 'Con receta' : med.med_type === 'GENERIC' ? 'Genérico' : 'Comercial'}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* ── CATÁLOGO VETERINARIA / ODONTOLOGÍA / SALÓN ── */}
+          {isServiceBusiness && !isFarmacia && (
+            <>
+              {filteredSpecialtyServices.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-center text-slate-400">
+                  <span className="text-5xl mb-2 opacity-30">
+                    {isVeterinaria ? '🐾' : isOdontologia ? '🦷' : '✂️'}
                   </span>
+                  <p className="font-medium">No hay servicios registrados</p>
+                  <p className="text-sm">
+                    Crea servicios en el módulo de {isVeterinaria ? 'Veterinaria' : isOdontologia ? 'Odontología' : 'Salón de Belleza'}
+                  </p>
                 </div>
-              </button>
-            ))}
-          </div>
+              )}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {filteredSpecialtyServices.map(svc => (
+                  <button key={svc.id} onClick={() => addSpecialtyServiceToCart(svc)}
+                    className="flex flex-col items-start text-left p-4 rounded-lg border border-slate-200 hover:border-purple-400 hover:shadow-md transition-all bg-white group">
+                    <div className="w-full aspect-square bg-purple-50 rounded-md mb-3 flex items-center justify-center text-4xl group-hover:scale-110 transition-transform">
+                      {isVeterinaria ? '🐾' : isOdontologia ? '🦷' : '✂️'}
+                    </div>
+                    <h4 className="font-semibold text-slate-800 line-clamp-2 text-sm">{svc.nombre}</h4>
+                    {svc.descripcion && <p className="text-xs text-slate-400 line-clamp-2 mb-2">{svc.descripcion}</p>}
+                    <div className="mt-auto w-full">
+                      <span className="font-bold text-purple-600">{formatMoney(svc.precio)}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* ── CATÁLOGO NORMAL (tecnología, general, ferretería, ropa, etc.) ── */}
+          {!isRestaurante && !isFarmacia && !isServiceBusiness && (
+            <>
+              {filteredProducts.length === 0 && searchTerm && (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <div className="text-slate-300 mb-4">
+                    <ShoppingCart size={48} />
+                  </div>
+                  <p className="text-slate-500 font-medium">No hay productos disponibles</p>
+                  <p className="text-slate-400 text-sm">Intenta con otro término de búsqueda o verifica el stock</p>
+                </div>
+              )}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {filteredProducts.map(product => (
+                  <button
+                    key={product.id}
+                    onClick={() => addToCart(product)}
+                    disabled={product.stock_quantity === 0 && product.type !== ProductType.SERVICE}
+                    className="flex flex-col items-start text-left p-4 rounded-lg border border-slate-200 hover:border-blue-500 hover:shadow-md transition-all bg-white group disabled:opacity-50 disabled:bg-slate-50"
+                  >
+                    <div className="w-full aspect-square bg-slate-100 rounded-md mb-3 flex items-center justify-center text-slate-300 group-hover:text-blue-400 overflow-hidden">
+                      {(product as any).image_url ? (
+                        <img src={(product as any).image_url} alt={product.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <Smartphone size={40} />
+                      )}
+                    </div>
+                    <h4 className="font-semibold text-slate-800 line-clamp-2">{product.name}</h4>
+                    <p className="text-xs text-slate-500 mb-1">{product.sku}</p>
+                    <div className={`text-xs font-bold mb-2 ${product.stock_quantity === 0 ? 'text-red-500' : 'text-green-600'}`}>
+                      Stock: {product.stock_quantity}
+                    </div>
+                    <div className="mt-auto w-full flex justify-between items-center">
+                      <span className="font-bold text-blue-600">{formatMoney(product.price)}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${product.type === ProductType.SERIALIZED ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                        {product.type === ProductType.SERIALIZED ? 'IMEI' : 'STD'}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
