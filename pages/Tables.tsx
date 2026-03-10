@@ -121,13 +121,19 @@ const Tables: React.FC = () => {
 
   const loadProducts = useCallback(async () => {
     if (!companyId) return;
+    // Use restaurant menu items, not the general inventory
     const { data } = await supabase
-      .from('products')
-      .select('id, name, price, category')
+      .from('rest_menu_items')
+      .select('id, name, price, category_id, description')
       .eq('company_id', companyId)
       .eq('is_active', true)
-      .order('category, name');
-    if (data) setProducts(data);
+      .eq('is_available', true)
+      .order('name');
+    if (data) setProducts(data.map((item: any) => ({
+      ...item,
+      // Map category_id → category label for display grouping
+      category: item.category_id || 'Menú',
+    })));
   }, [companyId]);
 
   useEffect(() => {
@@ -340,7 +346,7 @@ const Tables: React.FC = () => {
 
   // Group products by category
   const productsByCategory = filteredProducts.reduce((acc: Record<string, any[]>, p) => {
-    const cat = p.category || 'Sin categoría';
+    const cat = p.category || 'Menú';
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(p);
     return acc;
@@ -628,14 +634,14 @@ const Tables: React.FC = () => {
               <div className="flex-1 flex flex-col overflow-hidden border-r border-slate-100">
                 <div className="p-3 border-b border-slate-100">
                   <input value={productSearch} onChange={e => setProductSearch(e.target.value)}
-                    placeholder="🔍 Buscar producto o categoría..."
+                    placeholder="🔍 Buscar plato del menú..."
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
                 <div className="flex-1 overflow-y-auto p-3 space-y-4">
                   {Object.keys(productsByCategory).length === 0 ? (
                     <div className="text-center py-8 text-slate-400">
                       <Coffee size={32} className="mx-auto mb-2 opacity-40" />
-                      <p className="text-sm">No se encontraron productos</p>
+                      <p className="text-sm">No hay platos en el menú. Agrégalos en Display de Cocina → Menú.</p>
                     </div>
                   ) : (
                     Object.entries(productsByCategory).map(([cat, prods]) => (

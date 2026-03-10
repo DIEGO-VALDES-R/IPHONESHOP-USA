@@ -6,11 +6,7 @@ import { toast } from 'react-hot-toast';
 interface DatabaseContextType {
   company: Company | null;
   companyId: string | null;
-  branchId: string | null;          // sucursal activa del empleado (fija) o seleccionada (admin)
-  activeBranchId: string | null;    // siempre la sucursal en contexto actual
-  allBranches: { id: string; name: string; business_type: string }[];
-  switchBranch: (bid: string) => Promise<void>;
-  isOwnerOrAdmin: boolean;
+  branchId: string | null;
   products: Product[];
   repairs: RepairOrder[];
   sales: Sale[];
@@ -61,9 +57,6 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
   const [customRole, setCustomRole] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Record<string, boolean>>({});
   const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
-  const [allBranches, setAllBranches] = useState<{ id: string; name: string; business_type: string }[]>([]);
-  const [activeBranchId, setActiveBranchId] = useState<string | null>(null);
-  const [isOwnerOrAdmin, setIsOwnerOrAdmin] = useState(false);
 
   // Helper: verificar permiso
   const hasPermission = useCallback((key: string): boolean => {
@@ -79,44 +72,57 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
   };
 
   const loadProducts = async (cid: string, bid?: string | null) => {
-    let q = supabase.from('products').select('*').eq('company_id', cid).eq('is_active', true).order('name');
-    if (bid) q = q.eq('branch_id', bid);
-    const { data, error } = await q;
+    let query = supabase.from('products').select('*')
+      .eq('company_id', cid).eq('is_active', true).order('name');
+    // Filter by branch when available — each branch sees only its own inventory
+    const resolvedBid = bid ?? branchId;
+    if (resolvedBid) query = query.eq('branch_id', resolvedBid);
+    const { data, error } = await query;
     if (error) console.error('❌ loadProducts:', error.message);
     setProducts((data || []) as any);
   };
 
-  const loadRepairs = async (cid: string) => {
-    const { data, error } = await supabase.from('repair_orders').select('*')
+  const loadRepairs = async (cid: string, bid?: string | null) => {
+    const resolvedBid = bid ?? branchId;
+    let query = supabase.from('repair_orders').select('*')
       .eq('company_id', cid).order('created_at', { ascending: false }).limit(50);
+    if (resolvedBid) query = query.eq('branch_id', resolvedBid);
+    const { data, error } = await query;
     if (error) console.error('❌ loadRepairs:', error.message);
     setRepairs((data || []) as any);
   };
 
-  const loadSales = async (cid: string) => {
-    const { data, error } = await supabase.from('invoices')
+  const loadSales = async (cid: string, bid?: string | null) => {
+    const resolvedBid = bid ?? branchId;
+    let query = supabase.from('invoices')
       .select('id, invoice_number, total_amount, subtotal, tax_amount, status, payment_method, created_at, customer_id')
       .eq('company_id', cid).order('created_at', { ascending: false }).limit(50);
+    if (resolvedBid) query = query.eq('branch_id', resolvedBid);
+    const { data, error } = await query;
     if (error) console.error('❌ loadSales:', error.message);
     else console.log('✅ Sales cargadas:', data?.length);
     setSales((data || []) as any);
   };
 
-  const loadCustomers = async (cid: string) => {
-    const { data, error } = await supabase.from('customers').select('*')
+  const loadCustomers = async (cid: string, bid?: string | null) => {
+    const resolvedBid = bid ?? branchId;
+    let query = supabase.from('customers').select('*')
       .eq('company_id', cid).order('name');
+    if (resolvedBid) query = query.eq('branch_id', resolvedBid);
+    const { data, error } = await query;
     if (error) console.error('❌ loadCustomers:', error.message);
     setCustomers((data || []) as any);
   };
 
   const loadSession = async (cid: string, bid?: string | null) => {
     if (!cid) return;
-    let qOpen = supabase.from('cash_register_sessions').select('*').eq('company_id', cid).eq('status', 'OPEN');
-    let qHist = supabase.from('cash_register_sessions').select('*').eq('company_id', cid).eq('status', 'CLOSED');
-    if (bid) { qOpen = qOpen.eq('branch_id', bid); qHist = qHist.eq('branch_id', bid); }
+    const resolvedBid = bid ?? branchId;
+    const baseOpen    = supabase.from('cash_register_sessions').select('*').eq('company_id', cid).eq('status', 'OPEN');
+    const baseClosed  = supabase.from('cash_register_sessions').select('*').eq('company_id', cid).eq('status', 'CLOSED');
     const [{ data: openSession, error: e1 }, { data: history, error: e2 }] = await Promise.all([
-      qOpen.maybeSingle(),
-      qHist.order('start_time', { ascending: false }).limit(20),
+      (resolvedBid ? baseOpen.eq('branch_id', resolvedBid) : baseOpen).maybeSingle(),
+      (resolvedBid ? baseClosed.eq('branch_id', resolvedBid) : baseClosed)
+        .order('start_time', { ascending: false }).limit(20),
     ]);
     if (e1) console.error('❌ loadSession(open):', e1.message);
     if (e2) console.error('❌ loadSession(history):', e2.message);
@@ -127,15 +133,14 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
   const loadAllData = async (cid: string, bid?: string | null) => {
     setIsLoading(true);
     await loadCompany(cid);
-    await loadBranches(cid);
-    await Promise.all([loadProducts(cid, bid), loadSales(cid), loadSession(cid, bid), loadRepairs(cid), loadCustomers(cid)]);
+    await Promise.all([
+      loadProducts(cid, bid),
+      loadSales(cid, bid),
+      loadSession(cid, bid),
+      loadRepairs(cid, bid),
+      loadCustomers(cid, bid),
+    ]);
     setIsLoading(false);
-  };
-
-  const loadBranches = async (cid: string) => {
-    const { data } = await supabase.from('branches').select('id, name, business_type').eq('company_id', cid).eq('is_active', true).order('name');
-    setAllBranches((data || []) as any);
-    return data || [];
   };
 
   const resolvebranchId = async (cid: string): Promise<string | null> => {
@@ -154,8 +159,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
       setUserRole('ADMIN');
       setCustomRole(null);
       setPermissions({});
-      resolvebranchId(overrideCompanyId).then(bid => setBranchId(bid));
-      loadAllData(overrideCompanyId);
+      resolvebranchId(overrideCompanyId).then(bid => { setBranchId(bid); loadAllData(overrideCompanyId, bid); });
       return;
     }
 
@@ -177,19 +181,13 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
       setUserRole(profile.role);
       setCustomRole(profile.custom_role || null);
       setPermissions(profile.permissions || {});
-      const isAdmin = profile.role === 'MASTER' || profile.role === 'ADMIN';
-      setIsOwnerOrAdmin(isAdmin);
 
       if (profile.company_id) {
         setCompanyId(profile.company_id);
         let bid = profile.branch_id || null;
         if (!bid) bid = await resolvebranchId(profile.company_id);
         setBranchId(bid);
-        // Admin/dueño: puede ver todas las sucursales; por defecto carga la primera
-        // Empleado: queda bloqueado a su sucursal
-        const effectiveBid = isAdmin ? bid : bid;
-        setActiveBranchId(effectiveBid);
-        await loadAllData(profile.company_id, isAdmin ? null : bid);
+        await loadAllData(profile.company_id, bid);
       } else {
         setIsLoading(false);
       }
@@ -204,12 +202,12 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
     setSession(null); setCompany(null);
     const bid = await resolvebranchId(cid);
     setBranchId(bid);
-    await loadAllData(cid);
+    await loadAllData(cid, bid);
     toast.success('Empresa cambiada');
   };
 
   const refreshProducts = useCallback(async () => {
-    if (companyId) await loadProducts(companyId);
+    if (companyId) await loadProducts(companyId, branchId);
   }, [companyId]);
 
   const refreshCompany = useCallback(async () => {
@@ -218,37 +216,37 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
 
   const refreshAll = useCallback(async () => {
     if (!companyId) return;
-    const bid = isOwnerOrAdmin ? activeBranchId : branchId;
     await Promise.all([
       loadCompany(companyId),
-      loadBranches(companyId),
-      loadProducts(companyId, bid),
-      loadSales(companyId),
-      loadRepairs(companyId),
-      loadSession(companyId, bid),
-      loadCustomers(companyId),
+      loadProducts(companyId, branchId),
+      loadSales(companyId, branchId),
+      loadRepairs(companyId, branchId),
+      loadSession(companyId, branchId),
+      loadCustomers(companyId, branchId),
     ]);
-  }, [companyId, activeBranchId, branchId, isOwnerOrAdmin]);
+  }, [companyId]);
 
   const addProduct = async (data: Omit<Product, 'id' | 'company_id'>) => {
     if (!companyId) return;
-    const { error } = await supabase.from('products').insert({ ...data, company_id: companyId, is_active: true });
+    const { error } = await supabase.from('products').insert({
+      ...data, company_id: companyId, branch_id: branchId, is_active: true
+    });
     if (error) { toast.error(error.message); return; }
-    await loadProducts(companyId);
+    await loadProducts(companyId, branchId);
     toast.success('Producto creado');
   };
 
   const updateProduct = async (id: string, data: Partial<Product>) => {
     const { error } = await supabase.from('products').update(data).eq('id', id);
     if (error) { toast.error(error.message); return; }
-    if (companyId) await loadProducts(companyId);
+    if (companyId) await loadProducts(companyId, branchId);
     toast.success('Producto actualizado');
   };
 
   const deleteProduct = async (id: string) => {
     const { error } = await supabase.from('products').update({ is_active: false }).eq('id', id);
     if (error) { toast.error(error.message); return; }
-    if (companyId) await loadProducts(companyId);
+    if (companyId) await loadProducts(companyId, branchId);
     toast.success('Producto eliminado');
   };
 
@@ -256,7 +254,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
     const { error } = await supabase.from('repair_orders')
       .update({ status, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) { toast.error(error.message); return; }
-    if (companyId) await loadRepairs(companyId);
+    if (companyId) await loadRepairs(companyId, branchId);
     toast.success(`Estado: ${status}`);
   };
 
@@ -267,7 +265,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
       ...data, company_id: companyId, branch_id: resolvedBranchId, updated_at: new Date().toISOString()
     });
     if (error) { toast.error(error.message); return; }
-    await loadRepairs(companyId);
+    await loadRepairs(companyId, branchId);
     toast.success('Orden creada');
   };
 
@@ -347,6 +345,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
           // Insert new customer
           await supabase.from('customers').insert({
             company_id:      companyId,
+            branch_id:       branchId,
             name:            customerName,
             document_number: customerDoc,
             phone:           saleData.customerPhone?.trim() || null,
@@ -410,23 +409,9 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
         .eq('id', session.id);
     }
 
-    await Promise.all([loadProducts(companyId), loadSales(companyId), loadSession(companyId)]);
+    await Promise.all([loadProducts(companyId, branchId), loadSales(companyId, branchId), loadSession(companyId, branchId)]);
     toast.success(balanceDue > 0 ? `Factura con saldo pendiente: $${balanceDue.toLocaleString('es-CO')}` : 'Venta guardada');
     return invoice as any;
-  };
-
-  const switchBranch = async (bid: string) => {
-    if (!companyId) return;
-    setActiveBranchId(bid);
-    setIsLoading(true);
-    await Promise.all([
-      loadProducts(companyId, bid),
-      loadSession(companyId, bid),
-      loadSales(companyId),
-    ]);
-    setIsLoading(false);
-    const branch = allBranches.find(b => b.id === bid);
-    toast.success(`Sucursal: ${branch?.name || bid}`);
   };
 
   const updateCompanyConfig = async (data: Partial<Company>) => {
@@ -445,12 +430,11 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
     if (!companyId) { toast.error('No hay empresa configurada'); return; }
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { toast.error('No hay sesión de usuario'); return; }
-    const resolvedBranchId = activeBranchId || branchId || await resolvebranchId(companyId);
+    const resolvedBranchId = branchId || await resolvebranchId(companyId);
     if (!resolvedBranchId) { toast.error('No se pudo obtener la sucursal'); return; }
     if (!branchId) setBranchId(resolvedBranchId);
     const { error } = await supabase.from('cash_register_sessions').insert({
       company_id: companyId,
-      branch_id: resolvedBranchId,
       register_id: '00000000-0000-0000-0000-000000000000',
       user_id: user.id,
       start_cash: amount,
@@ -458,7 +442,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
       status: 'OPEN'
     });
     if (error) { toast.error(error.message); return; }
-    await loadSession(companyId);
+    await loadSession(companyId, branchId);
     toast.success('Caja abierta');
   };
 
@@ -469,19 +453,17 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
       difference: endAmount - ((session.start_cash || 0) + (session.total_sales_cash || 0)),
     }).eq('id', session.id);
     if (error) { toast.error(error.message); return; }
-    if (companyId) await loadSession(companyId);
+    if (companyId) await loadSession(companyId, branchId);
     toast.success('Caja cerrada');
   };
 
   return (
     <DatabaseContext.Provider value={{
-      company, companyId, branchId, activeBranchId, allBranches, isOwnerOrAdmin,
-      products, repairs, sales, customers,
+      company, companyId, branchId, products, repairs, sales, customers,
       session, sessionsHistory, isLoading, userRole, customRole, permissions,
       availableCompanies, addProduct, updateProduct, deleteProduct, addRepair,
       updateRepairStatus, processSale, updateCompanyConfig, saveDianSettings,
-      openSession, closeSession, refreshProducts, refreshCompany, refreshAll,
-      switchCompany, switchBranch, hasPermission,
+      openSession, closeSession, refreshProducts, refreshCompany, refreshAll, switchCompany, hasPermission,
     }}>
       {children}
     </DatabaseContext.Provider>

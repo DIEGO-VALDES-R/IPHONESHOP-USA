@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import {
-  Users, Plus, Edit2, Trash2, X, Check, Mail, 
+  Users, Plus, Edit2, Trash2, X, Check, Mail,
   Shield, Lock, Eye, EyeOff, Copy, AlertTriangle,
   UserCheck, UserX, Building2, ChevronDown
 } from 'lucide-react';
@@ -46,16 +46,18 @@ const ROLES_BY_TYPE: Record<string, { id: string; label: string; icon: string; d
     { id: 'admin',       label: 'Administrador', icon: '⚙️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: true,  can_open_cash: true,  can_view_repairs: true,  can_delete_invoices: true  } },
   ],
   tienda_tecnologia: [
-    { id: 'cajero',           label: 'Cajero',            icon: '🧾', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
-    { id: 'tecnico_reparador',label: 'Técnico Reparador', icon: '🔧', defaultPerms: { can_sell: false, can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: true,  can_delete_invoices: false } },
-    { id: 'vendedor',         label: 'Vendedor',          icon: '📱', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
-    { id: 'supervisor',       label: 'Supervisor',        icon: '👁️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: false, can_open_cash: true,  can_view_repairs: true,  can_delete_invoices: false } },
-    { id: 'admin',            label: 'Administrador',     icon: '⚙️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: true,  can_open_cash: true,  can_view_repairs: true,  can_delete_invoices: true  } },
+    { id: 'cajero',            label: 'Cajero',            icon: '🧾', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'tecnico_reparador', label: 'Técnico Reparador', icon: '🔧', defaultPerms: { can_sell: false, can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: true,  can_delete_invoices: false } },
+    { id: 'vendedor',          label: 'Vendedor',          icon: '📱', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'supervisor',        label: 'Supervisor',        icon: '👁️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: false, can_open_cash: true,  can_view_repairs: true,  can_delete_invoices: false } },
+    { id: 'bodeguero',         label: 'Bodeguero',         icon: '📦', defaultPerms: { can_sell: false, can_refund: false, can_view_reports: false, can_manage_inventory: true,  can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'admin',             label: 'Administrador',     icon: '⚙️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: true,  can_open_cash: true,  can_view_repairs: true,  can_delete_invoices: true  } },
   ],
   restaurante: [
     { id: 'cajero',    label: 'Cajero',        icon: '🧾', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
     { id: 'mesero',    label: 'Mesero',        icon: '🍽️', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
-    { id: 'cocina',    label: 'Cocina',        icon: '👨‍🍳', defaultPerms: { can_sell: false, can_refund: false, can_view_reports: false, can_manage_inventory: true,  can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'cocina',    label: 'Cocina',        icon: '👨‍🍳', defaultPerms: { can_sell: false, can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false, can_view_kitchen: true } },
+    { id: 'domicilios',label: 'Domiciliario',  icon: '🛵', defaultPerms: { can_sell: false, can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
     { id: 'supervisor',label: 'Supervisor',    icon: '👁️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
     { id: 'admin',     label: 'Administrador', icon: '⚙️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: true,  can_open_cash: true,  can_view_repairs: false, can_delete_invoices: true  } },
   ],
@@ -65,6 +67,56 @@ const ROLES_BY_TYPE: Record<string, { id: string; label: string; icon: string; d
     { id: 'bodeguero', label: 'Bodeguero',     icon: '📦', defaultPerms: { can_sell: false, can_refund: false, can_view_reports: false, can_manage_inventory: true,  can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
     { id: 'supervisor',label: 'Supervisor',    icon: '👁️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
     { id: 'admin',     label: 'Administrador', icon: '⚙️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: true,  can_open_cash: true,  can_view_repairs: false, can_delete_invoices: true  } },
+  ],
+  salon: [
+    { id: 'estilista',    label: 'Estilista',       icon: '💇', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'cajero',       label: 'Cajero/Recepción',icon: '🧾', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'manicurista',  label: 'Manicurista',     icon: '💅', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'esteticista',  label: 'Esteticista',     icon: '🧖', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'supervisor',   label: 'Supervisor',      icon: '👁️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'admin',        label: 'Administrador',   icon: '⚙️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: true,  can_open_cash: true,  can_view_repairs: false, can_delete_invoices: true  } },
+  ],
+  odontologia: [
+    { id: 'odontologo',   label: 'Odontólogo',      icon: '🦷', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'higienista',   label: 'Higienista',      icon: '🧹', defaultPerms: { can_sell: false, can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'recepcion',    label: 'Recepción',        icon: '🧾', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'supervisor',   label: 'Supervisor',      icon: '👁️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'admin',        label: 'Administrador',   icon: '⚙️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: true,  can_open_cash: true,  can_view_repairs: false, can_delete_invoices: true  } },
+  ],
+  veterinaria: [
+    { id: 'veterinario',  label: 'Veterinario',     icon: '🐾', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'auxiliar',     label: 'Auxiliar Clínico',icon: '🩺', defaultPerms: { can_sell: false, can_refund: false, can_view_reports: false, can_manage_inventory: true,  can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'recepcion',    label: 'Recepción',        icon: '🧾', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'peluquero',    label: 'Peluquero Mascotas',icon: '✂️',defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'admin',        label: 'Administrador',   icon: '⚙️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: true,  can_open_cash: true,  can_view_repairs: false, can_delete_invoices: true  } },
+  ],
+  farmacia: [
+    { id: 'farmaceutico', label: 'Farmacéutico',    icon: '💊', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: true,  can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'cajero',       label: 'Cajero',          icon: '🧾', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'regente',      label: 'Regente',         icon: '🔬', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'bodeguero',    label: 'Bodeguero',       icon: '📦', defaultPerms: { can_sell: false, can_refund: false, can_view_reports: false, can_manage_inventory: true,  can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'admin',        label: 'Administrador',   icon: '⚙️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: true,  can_open_cash: true,  can_view_repairs: false, can_delete_invoices: true  } },
+  ],
+  ferreteria: [
+    { id: 'vendedor',     label: 'Vendedor',        icon: '🔩', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'cajero',       label: 'Cajero',          icon: '🧾', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'bodeguero',    label: 'Bodeguero',       icon: '📦', defaultPerms: { can_sell: false, can_refund: false, can_view_reports: false, can_manage_inventory: true,  can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'supervisor',   label: 'Supervisor',      icon: '👁️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'admin',        label: 'Administrador',   icon: '⚙️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: true,  can_open_cash: true,  can_view_repairs: false, can_delete_invoices: true  } },
+  ],
+  supermercado: [
+    { id: 'cajero',       label: 'Cajero',          icon: '🧾', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'repositor',    label: 'Repositor',       icon: '🛒', defaultPerms: { can_sell: false, can_refund: false, can_view_reports: false, can_manage_inventory: true,  can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'bodeguero',    label: 'Bodeguero',       icon: '📦', defaultPerms: { can_sell: false, can_refund: false, can_view_reports: false, can_manage_inventory: true,  can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'supervisor',   label: 'Supervisor',      icon: '👁️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'admin',        label: 'Administrador',   icon: '⚙️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: true,  can_open_cash: true,  can_view_repairs: false, can_delete_invoices: true  } },
+  ],
+  zapateria: [
+    { id: 'vendedor',     label: 'Vendedor',        icon: '👟', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'cajero',       label: 'Cajero',          icon: '🧾', defaultPerms: { can_sell: true,  can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: true,  can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'zapatero',     label: 'Zapatero/Reparador',icon: '🧵',defaultPerms: { can_sell: false, can_refund: false, can_view_reports: false, can_manage_inventory: false, can_manage_team: false, can_open_cash: false, can_view_repairs: true,  can_delete_invoices: false } },
+    { id: 'bodeguero',    label: 'Bodeguero',       icon: '📦', defaultPerms: { can_sell: false, can_refund: false, can_view_reports: false, can_manage_inventory: true,  can_manage_team: false, can_open_cash: false, can_view_repairs: false, can_delete_invoices: false } },
+    { id: 'admin',        label: 'Administrador',   icon: '⚙️', defaultPerms: { can_sell: true,  can_refund: true,  can_view_reports: true,  can_manage_inventory: true,  can_manage_team: true,  can_open_cash: true,  can_view_repairs: false, can_delete_invoices: true  } },
   ],
 };
 
@@ -542,12 +594,14 @@ const Team: React.FC = () => {
                   ))}
                 </div>
               </div>
-              {isEnterprise && branches.length > 1 && (
+              {branches.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Asignar a sucursal</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <span className="flex items-center gap-1.5"><Building2 size={14} /> Asignar a sucursal</span>
+                  </label>
                   <select value={inviteBranch} onChange={e => setInviteBranch(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white">
-                    <option value="">Sede principal</option>
+                    <option value="">— Sede principal —</option>
                     {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
@@ -600,12 +654,14 @@ const Team: React.FC = () => {
                   ))}
                 </div>
               </div>
-              {isEnterprise && (
+              {branches.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Sucursal</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <span className="flex items-center gap-1.5"><Building2 size={14} /> Sucursal asignada</span>
+                  </label>
                   <select value={editBranch} onChange={e => setEditBranch(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none text-sm bg-white">
-                    <option value="">Sede principal</option>
+                    <option value="">— Sede principal —</option>
                     {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>

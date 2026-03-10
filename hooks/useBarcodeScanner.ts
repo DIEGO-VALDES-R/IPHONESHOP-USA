@@ -12,19 +12,18 @@ export const useBarcodeScanner = (onScan: (barcode: string) => void) => {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Ignorar si el usuario está escribiendo en un input de búsqueda o texto
+      // Si el foco está en cualquier campo editable, dejar que el navegador
+      // maneje el evento normalmente — nunca interceptar escritura del usuario.
       const target = event.target as HTMLElement;
-      const isInputField = 
-        target.tagName === 'INPUT' || 
-        target.tagName === 'TEXTAREA' || 
-        target.contentEditable === 'true';
+      const isInputField =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable;
 
-      // Si es un input de búsqueda específico, permitir que funcione normalmente
-      if (isInputField && (target as HTMLInputElement).placeholder?.includes('Buscar')) {
-        return;
-      }
+      if (isInputField) return;
 
-      // Detectar tecla Enter - fin de escaneo
+      // Detectar tecla Enter - fin de escaneo (solo fuera de inputs)
       if (event.key === 'Enter' && barcodeBufferRef.current.length > 0) {
         event.preventDefault();
         setIsScanning(false);
@@ -35,22 +34,20 @@ export const useBarcodeScanner = (onScan: (barcode: string) => void) => {
       }
 
       // Detectar caracteres imprimibles (códigos de barras típicos)
+      // Solo actúa cuando el foco NO está en un campo de texto
       if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        // No es un input de texto, entonces es probablemente un escaneo
-        if (!isInputField) {
-          event.preventDefault();
-          setIsScanning(true);
-          barcodeBufferRef.current += event.key;
+        event.preventDefault();
+        setIsScanning(true);
+        barcodeBufferRef.current += event.key;
 
-          // Resetear timeout si existe
-          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        // Resetear timeout si existe
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-          // Timeout de seguridad: si no hay Enter en 2 segundos, limpiar buffer
-          timeoutRef.current = setTimeout(() => {
-            barcodeBufferRef.current = '';
-            setIsScanning(false);
-          }, 2000);
-        }
+        // Timeout de seguridad: si no hay Enter en 2 segundos, limpiar buffer
+        timeoutRef.current = setTimeout(() => {
+          barcodeBufferRef.current = '';
+          setIsScanning(false);
+        }, 2000);
       }
     };
 

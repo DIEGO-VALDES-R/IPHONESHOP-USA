@@ -3,18 +3,21 @@ import { supabase } from '../supabaseClient';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { toast } from 'react-hot-toast';
 
+// Mapeo de tipo de negocio a nombre legible para prellenar
 const BUSINESS_TYPE_LABELS: Record<string, string> = {
-  general: '🏪 General',
-  tienda_tecnologia: '📱 Tecnología',
-  restaurante: '🍽️ Restaurante',
-  salon: '✂️ Salón',
-  zapateria: '👟 Zapatería',
-  odontologia: '🦷 Odontología',
-  veterinaria: '🐾 Veterinaria',
-  farmacia: '💊 Farmacia',
-  ropa: '👗 Ropa',
+  general:           'Tienda General',
+  tienda_tecnologia: 'Tecnología / Celulares',
+  restaurante:       'Restaurante / Cafetería',
+  ropa:              'Ropa / Calzado',
+  zapateria:         'Zapatería / Marroquinería',
+  ferreteria:        'Ferretería / Construcción',
+  farmacia:          'Farmacia / Droguería',
+  supermercado:      'Supermercado / Abarrotes',
+  salon:             'Salón de Belleza / Spa',
+  odontologia:       'Consultorio Odontológico',
+  veterinaria:       'Clínica Veterinaria',
+  otro:              'Negocio',
 };
-
 
 const Branches: React.FC = () => {
   const { company, isLoading: ctxLoading } = useDatabase();
@@ -26,11 +29,19 @@ const Branches: React.FC = () => {
   const [showEdit, setShowEdit] = useState(false);
   const [selected, setSelected] = useState<any>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: '', nit: '', email: '', phone: '', adminEmail: '', adminPassword: '', business_type: 'general' });
-  const [editForm, setEditForm] = useState({ name: '', nit: '', email: '', phone: '', subscription_status: 'ACTIVE' });
+  const [confirmDeleteId, setConfirmDeleteId] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [form, setForm] = useState({ name: '', nit: '', email: '', phone: '', adminEmail: '', adminPassword: '', business_type: '' });
+  const [editForm, setEditForm] = useState({ name: '', nit: '', email: '', phone: '', address: '', subscription_status: 'ACTIVE', business_type: 'general' });
 
   const isPro = ['PRO', 'MASTER', 'ENTERPRISE'].includes(company?.subscription_plan || '');
   const MAX_BRANCHES = 3;
+
+  // Derivar tipo de negocio del padre para prellenar nombre sugerido
+  const parentBusinessType = (company as any)?.config?.business_type
+    || (Array.isArray((company as any)?.config?.business_types) ? (company as any).config.business_types[0] : null)
+    || 'general';
+  const parentTypeLabel = BUSINESS_TYPE_LABELS[parentBusinessType] || 'Negocio';
 
   const load = async () => {
     if (!company?.id) return;
@@ -46,7 +57,7 @@ const Branches: React.FC = () => {
 
   useEffect(() => { load(); }, [company?.id]);
 
-  const f = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(p => ({ ...p, [k]: e.target.value }));
+  const f  = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(p => ({ ...p, [k]: e.target.value }));
   const fe = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setEditForm(p => ({ ...p, [k]: e.target.value }));
 
   const handleCreate = async () => {
@@ -59,13 +70,11 @@ const Branches: React.FC = () => {
     }
     setCreating(true);
     try {
-      // Crear usuario auth (si ya existe, continuar igual)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: form.adminEmail, password: form.adminPassword,
         options: { data: { full_name: form.name } }
       });
       if (authError && !authError.message.includes('already registered')) throw authError;
-      // Si ya existe, buscar el user_id existente
       let userId = authData?.user?.id;
       if (!userId) {
         const { data: existingProfile } = await supabase
@@ -75,28 +84,33 @@ const Branches: React.FC = () => {
       if (!userId) throw new Error('No se pudo crear o encontrar el usuario administrador');
 
       const { data: newCompany, error: companyError } = await supabase.from('companies').insert({
-        name: form.name, nit: form.nit, email: form.email, phone: form.phone, business_type: form.business_type,
+        name: form.name, nit: form.nit, email: form.email, phone: form.phone,
         subscription_plan: 'BASIC',
         subscription_status: 'ACTIVE',
         tipo: 'sucursal',
         negocio_padre_id: company!.id,
-        config: { tax_rate: 19, currency_symbol: '$', invoice_prefix: 'POS' }
+        // Heredar tipo de negocio y moneda del padre
+        config: {
+          tax_rate: (company as any)?.config?.tax_rate ?? 19,
+          currency_symbol: (company as any)?.config?.currency_symbol ?? '$',
+          invoice_prefix: 'POS',
+          business_type: form.business_type || parentBusinessType,
+          business_types: [form.business_type || parentBusinessType],
+        }
       }).select().single();
       if (companyError) throw companyError;
 
-      if (userId) {
-        await supabase.from('profiles').upsert({
-          id: userId, company_id: newCompany.id,
-          role: 'ADMIN', full_name: form.name, email: form.adminEmail, is_active: true
-        }, { onConflict: 'id' });
-        const { data: branch } = await supabase.from('branches')
-          .insert({ company_id: newCompany.id, name: 'Sede Principal', is_active: true }).select().single();
-        if (branch) await supabase.from('profiles').update({ branch_id: branch.id }).eq('id', userId);
-      }
+      await supabase.from('profiles').upsert({
+        id: userId, company_id: newCompany.id,
+        role: 'ADMIN', full_name: form.name, email: form.adminEmail, is_active: true
+      }, { onConflict: 'id' });
+      const { data: branch } = await supabase.from('branches')
+        .insert({ company_id: newCompany.id, name: 'Sede Principal', is_active: true }).select().single();
+      if (branch) await supabase.from('profiles').update({ branch_id: branch.id }).eq('id', userId);
 
       toast.success(`Sucursal "${form.name}" creada exitosamente`);
       setShowCreate(false);
-      setForm({ name: '', nit: '', email: '', phone: '', adminEmail: '', adminPassword: '', business_type: 'general' });
+      setForm({ name: '', nit: '', email: '', phone: '', adminEmail: '', adminPassword: '' });
       load();
     } catch (err: any) { toast.error(err.message); }
     finally { setCreating(false); }
@@ -104,10 +118,19 @@ const Branches: React.FC = () => {
 
   const handleEdit = async () => {
     if (!selected) return;
+    // Merge business_type into the config jsonb field
+    const currentConfig = selected.config || {};
+    const updatedConfig = {
+      ...currentConfig,
+      business_type: editForm.business_type,
+      business_types: [editForm.business_type],
+    };
     const { error } = await supabase.from('companies').update({
       name: editForm.name, nit: editForm.nit,
       email: editForm.email, phone: editForm.phone,
-      subscription_status: editForm.subscription_status
+      address: editForm.address,
+      subscription_status: editForm.subscription_status,
+      config: updatedConfig,
     }).eq('id', selected.id);
     if (error) { toast.error(error.message); return; }
     toast.success('Sucursal actualizada');
@@ -115,15 +138,38 @@ const Branches: React.FC = () => {
     load();
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`¿Eliminar la sucursal "${name}"? Esta acción no se puede deshacer.`)) return;
-    // Eliminar en orden por FK
-    await supabase.from('profiles').delete().eq('company_id', id);
-    await supabase.from('branches').delete().eq('company_id', id);
-    const { error } = await supabase.from('companies').delete().eq('id', id);
-    if (error) { toast.error(error.message); return; }
-    toast.success(`Sucursal "${name}" eliminada`);
-    load();
+  // Delete con confirmación modal y manejo correcto de FK
+  const confirmAndDelete = (id: string, name: string) => {
+    setConfirmDeleteId({ id, name });
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDeleteId) return;
+    setDeleting(true);
+    try {
+      const { id, name } = confirmDeleteId;
+      // Eliminar hijos en orden correcto para respetar FK
+      await supabase.from('invoice_items').delete().in(
+        'invoice_id',
+        (await supabase.from('invoices').select('id').eq('company_id', id)).data?.map((r: any) => r.id) || []
+      );
+      await supabase.from('invoices').delete().eq('company_id', id);
+      await supabase.from('products').delete().eq('company_id', id);
+      await supabase.from('customers').delete().eq('company_id', id);
+      await supabase.from('repair_orders').delete().eq('company_id', id);
+      await supabase.from('cash_register_sessions').delete().eq('company_id', id);
+      await supabase.from('profiles').delete().eq('company_id', id);
+      await supabase.from('branches').delete().eq('company_id', id);
+      const { error } = await supabase.from('companies').delete().eq('id', id);
+      if (error) throw error;
+      toast.success(`Sucursal "${name}" eliminada`);
+      setConfirmDeleteId(null);
+      load();
+    } catch (err: any) {
+      toast.error('Error al eliminar: ' + err.message);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleSuspend = async (id: string, current: string) => {
@@ -182,6 +228,8 @@ const Branches: React.FC = () => {
         </div>
         <button onClick={() => {
           if (branches.length >= MAX_BRANCHES) { toast.error('Has alcanzado el límite máximo de 3 sucursales.'); return; }
+          // Pre-sugerir nombre basado en tipo de negocio
+          setForm(f => ({ ...f, name: `${parentTypeLabel} — Sucursal ${branches.length + 2}`, nit: company?.nit || '', business_type: parentBusinessType }));
           setShowCreate(true);
         }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200">
           + Nueva Sucursal
@@ -220,21 +268,26 @@ const Branches: React.FC = () => {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
-                {['Negocio', 'NIT', 'Email', 'Estado', 'Acciones'].map(h => (
+                {['Negocio', 'Tipo', 'NIT', 'Email', 'Estado', 'Acciones'].map(h => (
                   <th key={h} className="px-5 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
-                <tr><td colSpan={5} className="px-5 py-10 text-center text-slate-400">Cargando...</td></tr>
+                <tr><td colSpan={6} className="px-5 py-10 text-center text-slate-400">Cargando...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={5} className="px-5 py-10 text-center text-slate-400">No hay sucursales registradas</td></tr>
+                <tr><td colSpan={6} className="px-5 py-10 text-center text-slate-400">No hay sucursales registradas</td></tr>
               ) : filtered.map(b => {
                 const st = statusColors[b.subscription_status] || statusColors['INACTIVE'];
                 return (
                   <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-5 py-4 font-bold text-slate-800">{b.name}</td>
+                    <td className="px-5 py-4">
+                      <span className="text-xs bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-full font-medium">
+                        {BUSINESS_TYPE_LABELS[b.config?.business_type || 'general'] || 'General'}
+                      </span>
+                    </td>
                     <td className="px-5 py-4 text-slate-500 font-mono text-xs">{b.nit}</td>
                     <td className="px-5 py-4 text-slate-500 text-xs">{b.email || '—'}</td>
                     <td className="px-5 py-4">
@@ -242,16 +295,16 @@ const Branches: React.FC = () => {
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex gap-2">
-                        <button onClick={() => { setSelected(b); setEditForm({ name: b.name, nit: b.nit, email: b.email || '', phone: b.phone || '', subscription_status: b.subscription_status }); setShowEdit(true); }}
+                        <button onClick={() => { setSelected(b); setEditForm({ name: b.name, nit: b.nit || '', email: b.email || '', phone: b.phone || '', address: b.address || '', subscription_status: b.subscription_status, business_type: b.config?.business_type || parentBusinessType }); setShowEdit(true); }}
                           className="px-3 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors">✏️ Editar</button>
                         <button onClick={() => handleSuspend(b.id, b.subscription_status)}
-                          className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-colors ${b.subscription_status === 'ACTIVE' ? 'text-red-600 bg-red-50 border-red-200 hover:bg-red-100' : 'text-green-600 bg-green-50 border-green-200 hover:bg-green-100'}`}>
-                          {b.subscription_status === 'ACTIVE' ? 'Suspender' : '✓ Activar'}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-colors ${b.subscription_status === 'ACTIVE' ? 'text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100' : 'text-green-600 bg-green-50 border-green-200 hover:bg-green-100'}`}>
+                          {b.subscription_status === 'ACTIVE' ? '⏸ Suspender' : '✓ Activar'}
                         </button>
                         <a href={`https://wa.me/573204884943?text=Soporte para sucursal ${b.name}`} target="_blank" rel="noreferrer"
                           className="px-3 py-1.5 text-xs font-bold text-green-600 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors">💬</a>
-                        <button onClick={() => handleDelete(b.id, b.name)}
-                          className="px-3 py-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors">🗑️</button>
+                        <button onClick={() => confirmAndDelete(b.id, b.name)}
+                          className="px-3 py-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors">🗑️ Eliminar</button>
                       </div>
                     </td>
                   </tr>
@@ -262,6 +315,38 @@ const Branches: React.FC = () => {
         </div>
       </div>
 
+      {/* Modal confirmar eliminar */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden">
+            <div className="bg-red-600 p-5 flex items-center gap-3">
+              <div className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xl">⚠️</div>
+              <div>
+                <h3 className="font-bold text-white">Eliminar sucursal</h3>
+                <p className="text-xs text-red-200">Esta acción no se puede deshacer</p>
+              </div>
+            </div>
+            <div className="p-6">
+              <p className="text-slate-700 text-sm mb-1">¿Eliminar permanentemente:</p>
+              <p className="font-bold text-slate-900 mb-4 text-lg">"{confirmDeleteId.name}"?</p>
+              <div className="bg-red-50 border border-red-100 rounded-lg p-3 mb-5">
+                <p className="text-xs text-red-700">⚠️ Se eliminarán todos los datos de esta sucursal (inventario, ventas, clientes, usuarios). El administrador de la sucursal perderá acceso inmediatamente.</p>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmDeleteId(null)} disabled={deleting}
+                  className="flex-1 py-2.5 border border-slate-300 text-slate-600 rounded-xl font-bold hover:bg-slate-50 text-sm">
+                  Cancelar
+                </button>
+                <button onClick={handleDelete} disabled={deleting}
+                  className="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 disabled:opacity-60 text-sm flex items-center justify-center gap-2">
+                  {deleting ? '⏳ Eliminando...' : '🗑️ Sí, eliminar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Crear */}
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
@@ -269,38 +354,40 @@ const Branches: React.FC = () => {
             <div className="p-6 border-b border-slate-100 flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-bold text-slate-800">Nueva Sucursal</h3>
-                <p className="text-xs text-slate-400">Plan BASIC — {MAX_BRANCHES - branches.length} disponibles</p>
+                <p className="text-xs text-slate-400">Plan PRO — {MAX_BRANCHES - branches.length} disponibles · Tipo: {BUSINESS_TYPE_LABELS[parentBusinessType]}</p>
               </div>
               <button onClick={() => setShowCreate(false)} className="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
             </div>
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              {[{ label: 'Nombre *', key: 'name', placeholder: 'Sucursal Norte' }, { label: 'NIT *', key: 'nit', placeholder: '900123456-7' }, { label: 'Email', key: 'email', placeholder: 'sucursal@email.com' }, { label: 'Teléfono', key: 'phone', placeholder: '300 123 4567' }].map(field => (
-                <div key={field.key}><label style={labelStyle}>{field.label}</label><input value={(form as any)[field.key]} onChange={f(field.key)} placeholder={field.placeholder} style={inputStyle} /></div>
+              {[
+                { label: 'Nombre de la sucursal *', key: 'name', placeholder: `${parentTypeLabel} — Sucursal Norte` },
+                { label: 'NIT / Cédula *',           key: 'nit',   placeholder: '900123456-7' },
+                { label: 'Email',                    key: 'email', placeholder: 'sucursal@email.com' },
+                { label: 'Teléfono',                 key: 'phone', placeholder: '300 123 4567' },
+              ].map(field => (
+                <div key={field.key}>
+                  <label style={labelStyle}>{field.label}</label>
+                  <input value={(form as any)[field.key]} onChange={f(field.key)} placeholder={field.placeholder} style={inputStyle} />
+                </div>
               ))}
+              <div>
+                <label style={labelStyle}>Tipo de negocio</label>
+                <select value={form.business_type} onChange={e => setForm(p => ({ ...p, business_type: e.target.value }))} style={{ ...inputStyle, cursor: 'pointer' }}>
+                  {Object.entries(BUSINESS_TYPE_LABELS).map(([id, label]) => (
+                    <option key={id} value={id}>{label}</option>
+                  ))}
+                </select>
+              </div>
               <div className="border-t border-slate-100 pt-4">
-                <p className="text-xs font-bold text-slate-400 uppercase mb-3">Credenciales del Administrador</p>
+                <p className="text-xs font-bold text-slate-400 uppercase mb-3">Credenciales del Administrador de la Sucursal</p>
                 <div className="space-y-3">
-                                    <div className="col-span-2">
-                    <label style={labelStyle}>Tipo de Negocio *</label>
-                    <select value={form.business_type} onChange={e => setForm(p => ({ ...p, business_type: e.target.value }))} style={inputStyle}>
-                      <option value="general">🏪 General / Tienda</option>
-                      <option value="tienda_tecnologia">📱 Tecnología / Celulares</option>
-                      <option value="restaurante">🍽️ Restaurante / Comidas</option>
-                      <option value="salon">✂️ Salón de Belleza</option>
-                      <option value="zapateria">👟 Zapatería / Calzado</option>
-                      <option value="odontologia">🦷 Odontología</option>
-                      <option value="veterinaria">🐾 Veterinaria</option>
-                      <option value="farmacia">💊 Farmacia / Droguería</option>
-                      <option value="ropa">👗 Ropa / Moda</option>
-                    </select>
-                  </div>
                   <div><label style={labelStyle}>Email Admin *</label><input type="email" value={form.adminEmail} onChange={f('adminEmail')} placeholder="admin@sucursal.com" style={inputStyle} /></div>
                   <div><label style={labelStyle}>Contraseña *</label><input type="password" value={form.adminPassword} onChange={f('adminPassword')} placeholder="Mínimo 6 caracteres" style={inputStyle} /></div>
                 </div>
               </div>
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowCreate(false)} className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50">Cancelar</button>
-                <button onClick={handleCreate} disabled={creating} className="flex-2 flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 disabled:opacity-60">
+                <button onClick={handleCreate} disabled={creating} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 disabled:opacity-60">
                   {creating ? 'Creando...' : 'Crear Sucursal'}
                 </button>
               </div>
@@ -318,10 +405,28 @@ const Branches: React.FC = () => {
               <button onClick={() => setShowEdit(false)} className="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
             </div>
             <div className="p-6 space-y-4">
-              {[{ label: 'Nombre', key: 'name' }, { label: 'NIT', key: 'nit' }, { label: 'Email', key: 'email' }, { label: 'Teléfono', key: 'phone' }].map(field => (
-                <div key={field.key}><label style={labelStyle}>{field.label}</label><input value={(editForm as any)[field.key]} onChange={fe(field.key)} style={inputStyle} /></div>
+              {[
+                { label: 'Nombre', key: 'name' },
+                { label: 'NIT / Cédula', key: 'nit' },
+                { label: 'Email', key: 'email' },
+                { label: 'Teléfono', key: 'phone' },
+                { label: 'Dirección', key: 'address' },
+              ].map(field => (
+                <div key={field.key}>
+                  <label style={labelStyle}>{field.label}</label>
+                  <input value={(editForm as any)[field.key]} onChange={fe(field.key)} style={inputStyle} />
+                </div>
               ))}
-              <div><label style={labelStyle}>Estado</label>
+              <div>
+                <label style={labelStyle}>Tipo de negocio</label>
+                <select value={editForm.business_type} onChange={fe('business_type')} style={{ ...inputStyle, cursor: 'pointer' }}>
+                  {Object.entries(BUSINESS_TYPE_LABELS).map(([id, label]) => (
+                    <option key={id} value={id}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Estado</label>
                 <select value={editForm.subscription_status} onChange={fe('subscription_status')} style={{ ...inputStyle, cursor: 'pointer' }}>
                   <option value="ACTIVE">Activo</option>
                   <option value="INACTIVE">Inactivo</option>
@@ -330,7 +435,7 @@ const Branches: React.FC = () => {
               </div>
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowEdit(false)} className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50">Cancelar</button>
-                <button onClick={handleEdit} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700">Guardar</button>
+                <button onClick={handleEdit} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700">Guardar cambios</button>
               </div>
             </div>
           </div>

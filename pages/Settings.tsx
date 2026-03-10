@@ -132,6 +132,7 @@ const Settings: React.FC = () => {
   };
 
   const [savingBranding, setSavingBranding] = useState(false);
+  const [invoiceTerms, setInvoiceTerms] = useState<string>('');
 
   // Sincronizar TODOS los estados cuando el contexto carga/actualiza company
   // Resuelve el caso donde company llega null en el primer render (async)
@@ -147,6 +148,7 @@ const Settings: React.FC = () => {
     setFontColor(cfg.font_color || '#ffffff');
     // Resuelve el bug donde Odontologia (y otros tipos) no aparecian seleccionados
     setBusinessTypes(parseBusinessTypes(cfg));
+    setInvoiceTerms(cfg.invoice_terms || '');
   }, [company]);
   const [paymentProviders, setPaymentProviders] = useState<Record<string, any>>({
     cash:      { enabled: true,  label: 'Efectivo',             icon: '💵' },
@@ -231,6 +233,7 @@ const Settings: React.FC = () => {
         font_color: fontColor,
         business_type: businessTypes[0] || 'general',   // compatibilidad legacy
         business_types: businessTypes,
+        invoice_terms: invoiceTerms,
       };
       const { error } = await supabase.from('companies')
         .update({ config: newConfig })
@@ -618,6 +621,24 @@ const Settings: React.FC = () => {
                   <span className="text-sm font-medium" style={{ color: fontColor }}>📦 Vista previa del menú</span>
                   <span className="text-xs opacity-70" style={{ color: fontColor }}>← así se verán los textos</span>
                 </div>
+              </div>
+
+              {/* Términos y condiciones de factura */}
+              <div className="mt-2 p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
+                <label className="block text-sm font-bold text-slate-700">
+                  📄 Términos y Condiciones de la Factura
+                </label>
+                <p className="text-xs text-slate-400">
+                  Aparecerán al pie de cada factura impresa. Personaliza según el tipo de negocio.
+                  Usa mayúsculas para títulos de sección y • para items de lista.
+                </p>
+                <textarea
+                  value={invoiceTerms}
+                  onChange={e => setInvoiceTerms(e.target.value)}
+                  rows={8}
+                  placeholder={"GARANTÍA\n• Productos tienen garantía de 30 días\n• No se aceptan devoluciones sin factura\n\nCONDICIONES\n• El establecimiento no se hace responsable por pérdida o daño de objetos personales"}
+                  className="w-full text-xs text-slate-700 bg-white border border-slate-200 rounded-lg p-3 resize-y focus:outline-none focus:ring-2 focus:ring-blue-300 font-mono leading-relaxed"
+                />
               </div>
 
               <button type="button" onClick={handleSaveBranding} disabled={savingBranding}

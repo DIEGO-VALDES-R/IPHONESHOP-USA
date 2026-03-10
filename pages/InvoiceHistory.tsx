@@ -189,17 +189,22 @@ const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, compan
             </div>
           )}
 
-          <div className="mt-6 pt-4 border-t border-slate-300 text-[9px] text-slate-500 leading-tight space-y-2">
-            <p className="font-bold uppercase text-slate-700 text-[10px] text-center tracking-wide">Terminos y Condiciones de Garantia</p>
-            <p>- Pantallas y vidrios no tienen cobertura de garantia</p>
-            <p>- Accesorios tienen garantia de 30 dias</p>
-            <p>- El proceso de garantia tiene duracion de 8 dias habiles</p>
-            <p>- No se realizan devoluciones de dinero</p>
-            <p>- El cliente debe presentar su factura original</p>
-            <div className="pt-1 border-t border-slate-200 text-center">
-              <p className="font-bold text-slate-600">Contacto: 316-154 55 54 | WhatsApp disponible</p>
-            </div>
-          </div>
+          {(() => {
+            const terms = (company?.config as any)?.invoice_terms?.trim();
+            if (!terms) return null;
+            return (
+              <div className="mt-6 pt-4 border-t border-slate-300 text-[9px] text-slate-500 leading-tight">
+                <p className="font-bold uppercase text-slate-700 text-[10px] text-center tracking-wide mb-2">
+                  Términos y Condiciones
+                </p>
+                {terms.split('\n').map((line: string, i: number) => (
+                  <p key={i} className={line.startsWith('•') || line.startsWith('-') ? 'ml-1' : line === line.toUpperCase() && line.length > 3 ? 'font-bold text-slate-600 mt-1.5 uppercase text-[9px]' : ''}>
+                    {line || <br />}
+                  </p>
+                ))}
+              </div>
+            );
+          })()}
 
           <p className="text-xs font-bold mt-6 text-center">GRACIAS POR SU COMPRA!</p>
         </div>
@@ -218,7 +223,7 @@ const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, compan
 
 const InvoiceHistory: React.FC = () => {
   const { formatMoney } = useCurrency();
-  const { company, companyId, userRole, hasPermission, session, refreshAll } = useDatabase();
+  const { company, companyId, userRole, hasPermission } = useDatabase();
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(false);
@@ -341,30 +346,9 @@ const InvoiceHistory: React.FC = () => {
       await supabase.from('invoice_items').delete().eq('invoice_id', inv.id);
       const { error } = await supabase.from('invoices').delete().eq('id', inv.id);
       if (error) throw error;
-
-      // ── Descontar de la sesión de caja activa ──────────────────────────
-      if (session?.id && session.status === 'OPEN') {
-        const amount = inv.total_amount || 0;
-        const method = (inv as any).payment_method?.method || (inv as any).payment_method || 'CASH';
-        if (method === 'CASH' || method === 'EFECTIVO') {
-          const newCash = Math.max(0, (session.total_sales_cash || 0) - amount);
-          await supabase.from('cash_register_sessions')
-            .update({ total_sales_cash: newCash })
-            .eq('id', session.id);
-        } else if (method === 'CARD' || method === 'TARJETA') {
-          const newCard = Math.max(0, (session.total_sales_card || 0) - amount);
-          await supabase.from('cash_register_sessions')
-            .update({ total_sales_card: newCard })
-            .eq('id', session.id);
-        }
-      }
-
       setInvoices(prev => prev.filter(i => i.id !== inv.id));
       setTotal(t => t - 1);
       if (selectedInvoice?.id === inv.id) setSelectedInvoice(null);
-
-      // Refrescar contexto global para actualizar Dashboard y CashControl
-      await refreshAll();
     } catch (e: any) {
       alert('Error al eliminar: ' + e.message);
     }

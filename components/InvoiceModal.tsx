@@ -53,6 +53,7 @@ interface CompanyData {
     dian_date?: string;
     dian_range_from?: string;
     dian_range_to?: string;
+    invoice_terms?: string;
   };
 }
 
@@ -456,40 +457,23 @@ const InvoiceModal: React.FC<InvoiceModalProps> = ({ isOpen, onClose, sale, comp
             </div>
           )}
 
-          {/* Terminos y condiciones */}
-          <div className="mt-6 pt-4 border-t border-slate-300 text-[9px] text-slate-500 leading-tight space-y-3">
-            <p className="font-bold uppercase text-slate-700 text-[10px] text-center tracking-wide">
-              Terminos y Condiciones de Garantia
-            </p>
-            <div>
-              <p className="font-bold text-slate-600 mb-0.5 uppercase text-[9px]">Condiciones de Recepcion de Equipos</p>
-              <p>• No se reciben equipos destapados o con sellos de garantia violados</p>
-              <p>• No se reciben equipos que no enciendan al momento de la recepcion</p>
-              <p>• No se reciben equipos con humedad, corrosion o dano por liquidos</p>
-              <p>• No se reciben equipos con golpes o danos fisicos no reportados al momento de la compra</p>
-            </div>
-            <div>
-              <p className="font-bold text-slate-600 mb-0.5 uppercase text-[9px]">Exclusiones de Garantia</p>
-              <p>• Pantallas (Display) y vidrios no tienen cobertura de garantia</p>
-              <p>• Danos ocasionados por mal uso, caidas o golpes</p>
-              <p>• Danos por liquidos o humedad</p>
-              <p>• Equipos que hayan sido intervenidos por terceros no autorizados</p>
-              <p>• Accesorios (cables, audifonos, cargadores) tienen garantia de 30 dias</p>
-              <p>• No se responde por extravio o hurto del equipo</p>
-              <p>• No se responde por bloqueo de iCloud o Activation Lock</p>
-              <p>• No se responde por equipos con reporte de robo ante operadores o autoridades</p>
-            </div>
-            <div>
-              <p className="font-bold text-slate-600 mb-0.5 uppercase text-[9px]">Proceso de Garantia</p>
-              <p>• El proceso de garantia tiene una duracion de 8 dias habiles</p>
-              <p>• No se realizan devoluciones de dinero; se aplica cambio del producto o nota credito</p>
-              <p>• El cliente debe presentar su factura original para hacer valida la garantia</p>
-              <p>• Los equipos deben entregarse con sus accesorios y empaque original</p>
-            </div>
-            <div className="pt-1 border-t border-slate-200 text-center">
-              <p className="font-bold text-slate-600">Contacto: 316-154 55 54 | WhatsApp disponible</p>
-            </div>
-          </div>
+          {/* Terminos y condiciones — dinámicos desde company.config.invoice_terms */}
+          {(() => {
+            const terms = (company?.config as any)?.invoice_terms?.trim();
+            if (!terms) return null;
+            return (
+              <div className="mt-6 pt-4 border-t border-slate-300 text-[9px] text-slate-500 leading-tight">
+                <p className="font-bold uppercase text-slate-700 text-[10px] text-center tracking-wide mb-2">
+                  Términos y Condiciones
+                </p>
+                {terms.split('\n').map((line: string, i: number) => (
+                  <p key={i} className={line.startsWith('•') || line.startsWith('-') ? 'ml-1' : line === line.toUpperCase() && line.length > 3 ? 'font-bold text-slate-600 mt-1.5 uppercase text-[9px]' : ''}>
+                    {line || <br />}
+                  </p>
+                ))}
+              </div>
+            );
+          })()}
 
           <p className="text-xs font-bold mt-6 text-center">¡GRACIAS POR SU COMPRA!</p>
         </div>

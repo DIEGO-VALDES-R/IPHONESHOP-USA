@@ -1,9 +1,10 @@
-﻿import React from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, Package, Wrench,
   Settings, LogOut, Menu, Building2, User,
-  Landmark, FileText, Globe, Receipt, ShieldCheck, Users, Utensils, ChefHat, Scissors, Stethoscope, FlaskConical, PawPrint, Pill, UserRound
+  Landmark, FileText, Globe, Receipt, ShieldCheck, Users, Utensils, ChefHat,
+  Scissors, Stethoscope, FlaskConical, PawPrint, Pill, UserRound, ChevronDown, ChevronRight
 } from 'lucide-react';
 import { useCurrency, CurrencyCode } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
@@ -11,211 +12,302 @@ import { supabase } from '../supabaseClient';
 
 interface LayoutProps { children: React.ReactNode; onAdminPanel?: () => void; }
 
+const BUSINESS_ICONS: Record<string, string> = {
+  general: '🏪', tienda_tecnologia: '📱', restaurante: '🍽️',
+  ropa: '👗', zapateria: '👟', ferreteria: '🔧', farmacia: '💊',
+  supermercado: '🛒', salon: '💇', odontologia: '🦷', veterinaria: '🐾', otro: '📦',
+};
+
+const BUSINESS_LABELS: Record<string, string> = {
+  general: 'Tienda General', tienda_tecnologia: 'Tecnología / Celulares',
+  restaurante: 'Restaurante / Cafetería', ropa: 'Ropa / Calzado',
+  zapateria: 'Zapatería / Marroquinería', ferreteria: 'Ferretería / Construcción',
+  farmacia: 'Farmacia / Droguería', supermercado: 'Supermercado / Abarrotes',
+  salon: 'Salón de Belleza / Spa', odontologia: 'Consultorio Odontológico',
+  veterinaria: 'Clínica Veterinaria', otro: 'Negocio',
+};
+
+function getNavItems(
+  businessType: string,
+  hasPermission: (k: string) => boolean,
+  isAdmin: boolean,
+  isPro: boolean,
+) {
+  const p = (key: string) => hasPermission(key) || isAdmin;
+  const type = businessType || 'general';
+
+  const items = [
+    { label: 'Dashboard',          path: '/',             icon: LayoutDashboard, show: true },
+    { label: 'Punto de Venta',     path: '/pos',          icon: ShoppingCart,    show: p('can_sell') },
+    { label: 'Control de Caja',    path: '/cash-control', icon: Landmark,        show: p('can_open_cash') },
+    { label: 'Inventario',         path: '/inventory',    icon: Package,         show: p('can_manage_inventory') },
+    { label: 'Historial Facturas', path: '/invoices',     icon: Receipt,         show: p('can_view_reports') },
+    { label: 'Clientes',           path: '/customers',    icon: UserRound,       show: p('can_view_reports') },
+  ];
+
+  // Módulos específicos por tipo
+  if (type === 'restaurante') {
+    items.push(
+      { label: 'Mesas',          path: '/tables',  icon: Utensils, show: p('can_sell') },
+      { label: 'Display Cocina', path: '/kitchen', icon: ChefHat,  show: isAdmin },
+    );
+  } else if (type === 'salon') {
+    items.push({ label: 'Salón de Belleza', path: '/salon',      icon: Scissors,    show: p('can_sell') });
+  } else if (type === 'odontologia') {
+    items.push({ label: 'Odontología',      path: '/dentistry',  icon: Stethoscope, show: p('can_sell') });
+  } else if (type === 'veterinaria') {
+    items.push({ label: 'Veterinaria',      path: '/veterinaria',icon: PawPrint,    show: p('can_sell') });
+  } else if (type === 'farmacia') {
+    items.push({ label: 'Farmacia',         path: '/farmacia',   icon: Pill,        show: p('can_sell') });
+  } else if (type === 'zapateria') {
+    items.push({ label: 'Zapatería / Rep.', path: '/shoe-repair',icon: Wrench,      show: p('can_view_repairs') });
+  } else {
+    // tecnología, general, ropa, ferretería, supermercado → Servicio Técnico
+    items.push({ label: 'Servicio Técnico', path: '/repairs',    icon: Wrench,      show: p('can_view_repairs') });
+  }
+
+  items.push(
+    { label: 'Cartera / CxC', path: '/receivables', icon: FileText,    show: p('can_view_reports') },
+    { label: 'Insumos',       path: '/supplies',    icon: FlaskConical, show: isAdmin },
+    { label: 'Equipo',        path: '/team',        icon: Users,        show: isPro && p('can_manage_team') },
+  );
+
+  return items.filter(i => i.show);
+}
+
+// ── NavLink ───────────────────────────────────────────────────────────────────
+const NavLink: React.FC<{
+  item: { label: string; path: string; icon: React.ElementType };
+  isActive: boolean; fontColor: string; onClick?: () => void;
+}> = ({ item, isActive, fontColor, onClick }) => (
+  <Link to={item.path} onClick={onClick}
+    className="flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all duration-150 text-sm"
+    style={{
+      background: isActive ? 'rgba(255,255,255,0.18)' : 'transparent',
+      color: fontColor, fontWeight: isActive ? 700 : 400, opacity: isActive ? 1 : 0.85,
+    }}>
+    <item.icon size={16} />
+    <span>{item.label}</span>
+  </Link>
+);
+
+// ── Acordeón por sucursal ─────────────────────────────────────────────────────
+const BranchSection: React.FC<{
+  name: string; businessType: string;
+  items: { label: string; path: string; icon: React.ElementType }[];
+  isActive: (path: string) => boolean; fontColor: string;
+  defaultOpen?: boolean; onNav?: () => void;
+}> = ({ name, businessType, items, isActive, fontColor, defaultOpen = false, onNav }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  const icon  = BUSINESS_ICONS[businessType]  || '🏪';
+  const label = BUSINESS_LABELS[businessType] || 'Negocio';
+
+  return (
+    <div className="mb-1">
+      <button onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all"
+        style={{ background: open ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)', color: fontColor }}>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-base flex-shrink-0">{icon}</span>
+          <div className="text-left min-w-0">
+            <p className="text-xs font-bold truncate leading-tight">{name}</p>
+            <p className="text-[10px] truncate leading-tight" style={{ opacity: 0.55 }}>{label}</p>
+          </div>
+        </div>
+        {open
+          ? <ChevronDown  size={13} style={{ opacity: 0.6, flexShrink: 0 }} />
+          : <ChevronRight size={13} style={{ opacity: 0.6, flexShrink: 0 }} />}
+      </button>
+
+      {open && (
+        <div className="ml-3 mt-0.5 pl-2 space-y-0.5"
+          style={{ borderLeft: '1px solid rgba(255,255,255,0.15)' }}>
+          {items.map(item => (
+            <NavLink key={item.path + name} item={item}
+              isActive={isActive(item.path)} fontColor={fontColor} onClick={onNav} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Layout ────────────────────────────────────────────────────────────────────
 const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
   const location = useLocation();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { currency, setCurrency } = useCurrency();
-  const { company, isLoading, userRole, customRole, permissions, hasPermission, allBranches, activeBranchId, switchBranch, isOwnerOrAdmin } = useDatabase();
+  const { company, isLoading, userRole, hasPermission } = useDatabase();
+  const [childBranches, setChildBranches] = useState<any[]>([]);
 
   const handleLogout = async () => { await supabase.auth.signOut(); };
 
-  const plan = company?.subscription_plan || 'BASIC';
-  const isPro = plan === 'PRO' || plan === 'ENTERPRISE';
-  const isEnterprise = plan === 'ENTERPRISE';
-  const isAdminOrMaster = userRole === 'MASTER' || userRole === 'ADMIN';
+  const plan       = company?.subscription_plan || 'BASIC';
+  const isPro      = ['PRO', 'ENTERPRISE', 'MASTER'].includes(plan);
+  const isAdmin    = userRole === 'MASTER' || userRole === 'ADMIN';
+  const brandColor = (company?.config as any)?.primary_color || '#1e293b';
+  const fontColor  = (company?.config as any)?.font_color    || '#ffffff';
+  const companyName = company?.name ?? 'POSmaster';
+  const logoUrl     = company?.logo_url ?? null;
 
-  // Business type: usa la sucursal activa si el usuario es admin/dueño;
-  // si no, usa el tipo de la sucursal asignada al empleado
-  const activeBranch = allBranches.find(b => b.id === activeBranchId) || allBranches[0];
-  // Tipo de negocio: SOLO de la sucursal activa. Sin fallback al config global.
-  // Si aún no tiene tipo asignado → 'general' puro (solo menú base, sin módulos especiales)
-  const branchType = activeBranch?.business_type || 'general';
-  const isRestaurant  = branchType === 'restaurante';
-  const isSalon       = branchType === 'salon';
-  const isZapateria   = branchType === 'zapateria';
-  const isDentistry   = branchType === 'odontologia';
-  const isVeterinaria = branchType === 'veterinaria';
-  const isFarmacia    = branchType === 'farmacia' || branchType === 'drogueria';
-  const hasRepairs    = branchType === 'tienda_tecnologia' || branchType === 'reparacion' || branchType === 'general';
+  const cfg = (company?.config as any) || {};
+  const mainBusinessTypes: string[] = Array.isArray(cfg.business_types)
+    ? cfg.business_types
+    : cfg.business_type ? [cfg.business_type] : ['general'];
 
-  const navItems = [
-    { label: 'Dashboard',           path: '/',             icon: LayoutDashboard, show: true },
-    { label: 'Punto de Venta',      path: '/pos',          icon: ShoppingCart,    show: hasPermission('can_sell') || isAdminOrMaster },
-    { label: 'Control de Caja',     path: '/cash-control', icon: Landmark,        show: hasPermission('can_open_cash') || isAdminOrMaster },
-    { label: 'Inventario',          path: '/inventory',    icon: Package,         show: !isZapateria && (hasPermission('can_manage_inventory') || isAdminOrMaster) },
-    { label: 'Historial Facturas',  path: '/invoices',     icon: Receipt,         show: hasPermission('can_view_reports') || isAdminOrMaster },
-    { label: 'Clientes',            path: '/customers',    icon: UserRound,       show: hasPermission('can_view_reports') || isAdminOrMaster },
-    { label: 'Servicio Técnico',    path: '/repairs',      icon: Wrench,          show: hasRepairs && !isZapateria && !isSalon && !isRestaurant && (hasPermission('can_view_repairs') || isAdminOrMaster) },
-    { label: 'Zapatería',           path: '/shoe-repair',  icon: Wrench,          show: isZapateria && isAdminOrMaster },
-    { label: 'Cartera / CxC',       path: '/receivables',  icon: FileText,        show: hasPermission('can_view_reports') || isAdminOrMaster },
-    { label: 'Mesas / Restaurante', path: '/tables',       icon: Utensils,        show: isRestaurant && isAdminOrMaster },
-    { label: 'Display de Cocina',   path: '/kitchen',      icon: ChefHat,         show: isRestaurant && isAdminOrMaster },
-    { label: 'Salón de Belleza',    path: '/salon',        icon: Scissors,        show: isSalon && isAdminOrMaster },
-    { label: 'Odontología',         path: '/dentistry',    icon: Stethoscope,     show: isDentistry && isAdminOrMaster },
-    { label: 'Veterinaria',         path: '/veterinaria',  icon: PawPrint,        show: isVeterinaria && isAdminOrMaster },
-    { label: 'Farmacia / Droguería', path: '/farmacia',    icon: Pill,            show: isFarmacia && isAdminOrMaster },
-    { label: 'Insumos',               path: '/supplies',     icon: FlaskConical,    show: isAdminOrMaster },
-    { label: 'Sucursales',          path: '/branches',     icon: Building2,       show: isPro && isAdminOrMaster },
-    { label: 'Equipo',              path: '/team',         icon: Users,           show: isPro && (hasPermission('can_manage_team') || isAdminOrMaster) },
-    { label: 'Configuración',       path: '/settings',     icon: Settings,        show: isAdminOrMaster },
-  ].filter(item => item.show);
+  useEffect(() => {
+    if (!company?.id || !isPro) { setChildBranches([]); return; }
+    supabase
+      .from('companies')
+      .select('id, name, config, subscription_status')
+      .eq('negocio_padre_id', company.id)
+      .eq('subscription_status', 'ACTIVE')
+      .order('created_at', { ascending: true })
+      .then(({ data }) => setChildBranches(data || []));
+  }, [company?.id, isPro]);
 
   const isActive = (path: string) => location.pathname === path;
-  const companyName = company?.name ?? 'IPHONESHOP USA';
-  const logoUrl = company?.logo_url ?? null;
 
-  // Brand color from Settings > Marca (stored in company.config.primary_color)
-  const brandColor = (company?.config as any)?.primary_color || '#1e293b';
-  const fontColor  = (company?.config as any)?.font_color   || '#ffffff';
   const hexToRgb = (hex: string) => {
     if (!hex || hex.length < 7) return '30,41,59';
     return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
   };
   const brandRgb = brandColor.startsWith('#') ? hexToRgb(brandColor) : '30,41,59';
 
-  // Nombre del rol a mostrar en sidebar
-  const roleDisplay = customRole
-    ? customRole.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-    : userRole === 'MASTER' ? 'Propietario'
-    : userRole === 'ADMIN' ? 'Administrador'
-    : userRole || 'Usuario';
+  const roleDisplay =
+    userRole === 'MASTER' ? 'Propietario' :
+    userRole === 'ADMIN'  ? 'Administrador' : userRole || 'Usuario';
+
+  // Secciones: tipos del negocio principal + sucursales hijas
+  const sections = [
+    ...mainBusinessTypes.map((bt, idx) => ({
+      id: `main-${bt}`, name: companyName, businessType: bt, defaultOpen: idx === 0,
+    })),
+    ...childBranches.map(b => ({
+      id: b.id, name: b.name,
+      businessType: b.config?.business_type || b.config?.business_types?.[0] || 'general',
+      defaultOpen: false,
+    })),
+  ];
+
+  const SidebarContent = ({ onNav }: { onNav?: () => void }) => (
+    <>
+      {/* Header */}
+      <div className="p-4 flex items-center gap-3 flex-shrink-0"
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0"
+          style={{ background: logoUrl ? '#fff' : 'rgba(0,0,0,0.3)' }}>
+          {logoUrl
+            ? <img src={logoUrl} alt="Logo" className="w-full h-full object-contain mix-blend-multiply" />
+            : <Building2 size={20} className="text-white" />}
+        </div>
+        <div className="min-w-0">
+          <h1 className="font-bold text-sm leading-tight truncate" style={{ color: fontColor }} title={companyName}>
+            {companyName}
+          </h1>
+          <p className="text-[10px]" style={{ color: fontColor, opacity: 0.5 }}>POSmaster</p>
+        </div>
+      </div>
+
+      {/* Menú acordeón */}
+      <nav className="flex-1 p-3 overflow-y-auto space-y-1">
+        {sections.map(sec => (
+          <BranchSection
+            key={sec.id}
+            name={sec.name}
+            businessType={sec.businessType}
+            items={getNavItems(sec.businessType, hasPermission, isAdmin, isPro)}
+            isActive={isActive}
+            fontColor={fontColor}
+            defaultOpen={sec.defaultOpen}
+            onNav={onNav}
+          />
+        ))}
+      </nav>
+
+      {/* Accesos fijos: Sucursales y Configuración */}
+      <div className="px-3 pb-2 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.12)', paddingTop: 10 }}>
+        {isPro && isAdmin && (
+          <Link to="/branches" onClick={onNav}
+            className="flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all text-sm w-full"
+            style={{ background: isActive('/branches') ? 'rgba(255,255,255,0.18)' : 'transparent', color: fontColor, fontWeight: isActive('/branches') ? 700 : 400, opacity: isActive('/branches') ? 1 : 0.8 }}>
+            <Building2 size={16} /> Sucursales
+          </Link>
+        )}
+        {isAdmin && (
+          <Link to="/settings" onClick={onNav}
+            className="flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all text-sm w-full"
+            style={{ background: isActive('/settings') ? 'rgba(255,255,255,0.18)' : 'transparent', color: fontColor, fontWeight: isActive('/settings') ? 700 : 400, opacity: isActive('/settings') ? 1 : 0.8 }}>
+            <Settings size={16} /> Configuración
+          </Link>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="p-3 space-y-1.5 flex-shrink-0"
+        style={{ borderTop: '1px solid rgba(255,255,255,0.12)' }}>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(0,0,0,0.2)' }}>
+          <Globe size={14} style={{ color: fontColor, opacity: 0.7 }} />
+          <select value={currency} onChange={e => setCurrency(e.target.value as CurrencyCode)}
+            className="bg-transparent text-xs font-medium focus:outline-none w-full cursor-pointer"
+            style={{ color: fontColor }}>
+            <option value="COP" className="text-slate-900">COP (Peso)</option>
+            <option value="USD" className="text-slate-900">USD (Dólar)</option>
+            <option value="EUR" className="text-slate-900">EUR (Euro)</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'rgba(0,0,0,0.2)' }}>
+          <div className="w-7 h-7 rounded-full bg-slate-600 flex items-center justify-center flex-shrink-0">
+            <User size={13} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium truncate" style={{ color: fontColor }}>{companyName}</p>
+            <p className="text-[10px]" style={{ color: fontColor, opacity: 0.6 }}>{roleDisplay}</p>
+          </div>
+        </div>
+
+        {onAdminPanel && (
+          <button onClick={onAdminPanel}
+            className="flex w-full items-center gap-2 px-3 py-2 text-purple-300 hover:bg-purple-900/20 rounded-lg transition-colors text-xs font-medium">
+            <ShieldCheck size={14} /> Panel POSmaster
+          </button>
+        )}
+        <button onClick={handleLogout}
+          className="flex w-full items-center gap-2 px-3 py-2 text-red-400 hover:bg-red-900/20 rounded-lg transition-colors text-xs font-medium">
+          <LogOut size={14} /> Cerrar Sesión
+        </button>
+      </div>
+    </>
+  );
 
   return (
     <div className="flex h-screen bg-slate-50">
       {/* Sidebar Desktop */}
-      <aside className="hidden md:flex flex-col w-64 text-white shadow-xl" style={{ background: brandColor, transition: 'background 0.4s ease' }}>
-        <div className="p-6" style={{ borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg flex items-center justify-center overflow-hidden w-12 h-12 flex-shrink-0" style={{ background: logoUrl ? '#fff' : 'rgba(0,0,0,0.3)' }}>
-              {logoUrl
-                ? <img src={logoUrl} alt="Logo" className="w-full h-full object-contain mix-blend-multiply" />
-                : <Building2 size={24} className="text-white" />}
-            </div>
-            <div>
-              <h1 className="font-bold text-lg tracking-tight leading-tight line-clamp-1" title={companyName}>
-                {companyName}
-              </h1>
-              <p className="text-xs text-slate-400">POSmaster</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Selector de Sucursal — solo visible para admin/dueño con múltiples sucursales */}
-        {isOwnerOrAdmin && allBranches.length > 1 && (
-          <div className="px-3 py-2 border-b border-white/10">
-            <p className="text-xs font-semibold mb-1.5" style={{ color: fontColor, opacity: 0.6 }}>SUCURSAL ACTIVA</p>
-            <select
-              value={activeBranchId || ''}
-              onChange={e => switchBranch(e.target.value)}
-              className="w-full text-xs rounded-lg px-2 py-1.5 font-semibold outline-none border-0"
-              style={{ background: 'rgba(255,255,255,0.12)', color: fontColor }}
-            >
-              {allBranches.map(b => (
-                <option key={b.id} value={b.id} style={{ background: '#1e293b', color: '#fff' }}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-        {isOwnerOrAdmin && allBranches.length === 1 && (
-          <div className="px-3 py-1.5 border-b border-white/10">
-            <p className="text-xs" style={{ color: fontColor, opacity: 0.55 }}>📍 {allBranches[0]?.name}</p>
-          </div>
-        )}
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          <label className="block text-[10px] font-bold uppercase tracking-wider mb-2 px-2" style={{ color: fontColor, opacity: 0.45 }}>
-            Menú Principal
-          </label>
-          {navItems.map((item) => (
-            <Link key={item.path} to={item.path}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                isActive(item.path) ? 'font-semibold' : ''
-              }`}
-              style={{ background: isActive(item.path) ? 'rgba(0,0,0,0.3)' : 'transparent', color: fontColor }}>
-              <item.icon size={20} />
-              <span className="font-medium">{item.label}</span>
-            </Link>
-          ))}
-        </nav>
-
-        <div className="p-4 space-y-2" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
-          <div className="flex items-center gap-3 px-4 py-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.2)' }}>
-            <Globe size={18} style={{ color: fontColor, opacity: 0.7 }} />
-            <select value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
-              className="bg-transparent text-sm font-medium focus:outline-none w-full cursor-pointer" style={{ color: fontColor }}>
-              <option value="COP" className="text-slate-900">COP (Peso)</option>
-              <option value="USD" className="text-slate-900">USD (Dólar)</option>
-              <option value="EUR" className="text-slate-900">EUR (Euro)</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-3 px-4 py-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.25)' }}>
-            <div className="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center">
-              <User size={16} />
-            </div>
-            <div className="overflow-hidden">
-              <p className="text-sm font-medium truncate" style={{ color: fontColor }}>{companyName}</p>
-              <p className="text-xs" style={{ color: fontColor, opacity: 0.65 }}>{roleDisplay}</p>
-            </div>
-          </div>
-
-          {onAdminPanel && (
-            <button onClick={onAdminPanel}
-              className="flex w-full items-center gap-3 px-4 py-2 text-purple-400 hover:bg-purple-900/20 rounded-lg transition-colors">
-              <ShieldCheck size={20} />
-              <span className="font-medium text-sm">Panel POSmaster</span>
-            </button>
-          )}
-
-          <button onClick={handleLogout}
-            className="flex w-full items-center gap-3 px-4 py-2 text-red-400 hover:bg-red-900/20 rounded-lg transition-colors">
-            <LogOut size={20} />
-            <span className="font-medium">Cerrar Sesión</span>
-          </button>
-        </div>
+      <aside className="hidden md:flex flex-col w-60 text-white shadow-xl flex-shrink-0"
+        style={{ background: brandColor, transition: 'background 0.4s ease' }}>
+        <SidebarContent />
       </aside>
 
-      {/* Mobile Menu */}
+      {/* Mobile overlay */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-50 md:hidden flex flex-col p-4" style={{ background: `rgba(${brandRgb},0.97)` }}>
-          <div className="flex justify-end mb-8">
+        <div className="fixed inset-0 z-50 md:hidden flex flex-col"
+          style={{ background: `rgba(${brandRgb},0.97)` }}>
+          <div className="flex justify-end p-4 flex-shrink-0">
             <button onClick={() => setIsMobileMenuOpen(false)} className="text-white text-2xl font-bold">✕</button>
           </div>
-          {navItems.map((item) => (
-            <Link key={item.path} to={item.path} onClick={() => setIsMobileMenuOpen(false)}
-              className="flex items-center gap-4 text-white text-xl py-4 border-b border-slate-700">
-              <item.icon size={24} />
-              <span>{item.label}</span>
-            </Link>
-          ))}
-          <div className="mt-4">
-            <select value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
-              className="w-full text-white p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.3)' }}>
-              <option value="COP">COP (Colombia)</option>
-              <option value="USD">USD (Dólar)</option>
-              <option value="EUR">EUR (Euro)</option>
-            </select>
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <SidebarContent onNav={() => setIsMobileMenuOpen(false)} />
           </div>
-          {onAdminPanel && (
-            <button onClick={onAdminPanel} className="mt-4 flex items-center gap-3 text-purple-400 py-3">
-              <ShieldCheck size={20} />
-              <span>Panel POSmaster</span>
-            </button>
-          )}
-          <button onClick={handleLogout} className="mt-4 flex items-center gap-3 text-red-400 py-3">
-            <LogOut size={20} />
-            <span>Cerrar Sesión</span>
-          </button>
         </div>
       )}
 
-      {/* Main Content */}
+      {/* Main */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="md:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center shadow-sm">
+        <header className="md:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center shadow-sm flex-shrink-0">
           <div className="flex items-center gap-2">
             {logoUrl && <img src={logoUrl} className="w-8 h-8 rounded object-cover" alt="logo" />}
-            <h1 className="font-bold text-slate-800">{companyName}</h1>
+            <h1 className="font-bold text-slate-800 text-sm">{companyName}</h1>
           </div>
           <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-600">
             <Menu size={24} />

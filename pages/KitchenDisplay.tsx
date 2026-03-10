@@ -351,8 +351,8 @@ const KitchenDisplay: React.FC = () => {
   // RENDER HELPERS
   // ═══════════════════════════════════════════════════════════════════
 
-  const inputCls = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400";
-  const labelCls = "block text-xs font-semibold text-slate-500 mb-1";
+  const inputCls = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400";
+  const labelCls = "block text-xs font-semibold text-slate-600 mb-1";
   const btnPrimary = "px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-semibold text-sm transition-all";
   const btnSecondary = "px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-sm transition-all";
 
@@ -364,7 +364,7 @@ const KitchenDisplay: React.FC = () => {
           <h3 className="font-bold text-slate-800 text-base">{title}</h3>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg"><X size={16}/></button>
         </div>
-        <div className="p-5 space-y-4">{children}</div>
+        <div className="p-5 space-y-4 text-slate-800">{children}</div>
       </div>
     </div>
   );
