@@ -343,6 +343,9 @@ const App: React.FC = () => {
   const contractToken       = contractTokenMatch ? contractTokenMatch[1] : null;
   const invitationTokenMatch = window.location.hash.match(/^#\/invitacion\/([a-f0-9]{32})$/);
   const invitationToken     = invitationTokenMatch ? invitationTokenMatch[1] : null;
+  // Ruta de sucursal directa — abre la sucursal en su propio contexto (nueva pestaña)
+  const branchRouteMatch = window.location.hash.match(/^#\/sucursal\/([0-9a-f-]{36})$/);
+  const branchRouteId    = branchRouteMatch ? branchRouteMatch[1] : null;
 
   const retryCheck = async () => {
     const { data: { session: s } } = await supabase.auth.getSession();
@@ -401,6 +404,13 @@ const App: React.FC = () => {
           }
         }
         setView(resolveView(status));
+
+        // Si venía de un link de sucursal antes del login, redirigir
+        const branchRedirect = sessionStorage.getItem('branch_redirect');
+        if (branchRedirect && resolveView(status) === 'app') {
+          sessionStorage.removeItem('branch_redirect');
+          window.location.hash = `/sucursal/${branchRedirect}`;
+        }
       } catch {
         setView('landing');
       }
@@ -417,6 +427,51 @@ const App: React.FC = () => {
 
   if (contractToken)   return <ContractSign token={contractToken} />;
   if (invitationToken) return <><Toaster position="top-right" /><AcceptInvitation token={invitationToken} /></>;
+
+  // ── Vista directa de sucursal ─────────────────────────────────────────────
+  // Se abre al hacer clic en "↗ Abrir" o al compartir el link de una sucursal.
+  // El usuario debe tener sesión activa; si no, ve el login primero.
+  if (branchRouteId && !checking) {
+    if (!session) {
+      // Sin sesión: mostrar login, guardar intent
+      sessionStorage.setItem('branch_redirect', branchRouteId);
+      return (
+        <>
+          <Toaster position="top-right" />
+          <Login onShowLanding={() => { window.location.hash = '/'; }} onShowRegister={() => setView('register')} />
+        </>
+      );
+    }
+    // Con sesión: cargar la sucursal en su propio DatabaseProvider
+    return (
+      <>
+        <Toaster position="top-right" />
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+          background: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
+          color: '#fff', padding: '8px 20px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans','Segoe UI',sans-serif",
+        }}>
+          <span>🏢 Vista Sucursal</span>
+          <button
+            onClick={() => { window.location.hash = '/'; }}
+            style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '4px 14px', borderRadius: 7, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
+            ← Ir al inicio
+          </button>
+        </div>
+        <div style={{ paddingTop: 42 }}>
+          <Router>
+            <DatabaseProvider overrideCompanyId={branchRouteId}>
+              <Routes>
+                <Route path="/*" element={<Layout onAdminPanel={undefined}><AppRoutes /></Layout>} />
+              </Routes>
+            </DatabaseProvider>
+          </Router>
+        </div>
+      </>
+    );
+  }
 
   if (checking) return (
     <div style={{ minHeight: '100vh', background: '#0a0f1e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Sans','Segoe UI',sans-serif" }}>

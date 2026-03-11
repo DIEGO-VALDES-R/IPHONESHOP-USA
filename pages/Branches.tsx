@@ -294,7 +294,24 @@ const Branches: React.FC = () => {
                       <span style={{ background: st.bg, color: st.color }} className="px-2.5 py-1 rounded-full text-xs font-bold">{st.label}</span>
                     </td>
                     <td className="px-5 py-4">
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
+                        {/* 🔗 Copiar link de acceso directo */}
+                        <button
+                          onClick={() => {
+                            const link = `${window.location.origin}/#/sucursal/${b.id}`;
+                            navigator.clipboard.writeText(link).then(() => toast.success('🔗 Link copiado'));
+                          }}
+                          title="Copiar link de acceso a esta sucursal"
+                          className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors">
+                          🔗 Link
+                        </button>
+                        {/* ↗ Abrir sucursal en nueva pestaña */}
+                        <button
+                          onClick={() => window.open(`${window.location.origin}/#/sucursal/${b.id}`, '_blank')}
+                          title="Abrir esta sucursal en nueva pestaña"
+                          className="px-3 py-1.5 text-xs font-bold text-violet-600 bg-violet-50 border border-violet-200 rounded-lg hover:bg-violet-100 transition-colors">
+                          ↗ Abrir
+                        </button>
                         <button onClick={() => { setSelected(b); setEditForm({ name: b.name, nit: b.nit || '', email: b.email || '', phone: b.phone || '', address: b.address || '', subscription_status: b.subscription_status, business_type: b.config?.business_type || parentBusinessType }); setShowEdit(true); }}
                           className="px-3 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors">✏️ Editar</button>
                         <button onClick={() => handleSuspend(b.id, b.subscription_status)}
