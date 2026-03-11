@@ -28,9 +28,34 @@ const POS: React.FC = () => {
   const [applyIva, setApplyIva] = useState(true);
 
   // ── DESCUENTO GLOBAL DEL CARRITO ──────────────────────────────────────────
+  const [discountMode, setDiscountMode] = useState<'pct' | 'val'>('pct');
   const [globalDiscount, setGlobalDiscount] = useState<string>('');
-  const globalDiscountNum = parseFloat(globalDiscount) || 0;
-  const clampedDiscount = Math.min(Math.max(globalDiscountNum, 0), 100);
+  const [globalDiscountVal, setGlobalDiscountVal] = useState<string>('');
+  // subtotalBruto necesario para convertir valor ↔ %. Se recalcula abajo.
+  const subtotalBrutoPreview = useMemo(() =>
+    cart.reduce((s, i) => s + i.price * i.quantity, 0), [cart]);
+
+  const clampedDiscount = useMemo(() => {
+    if (discountMode === 'pct') {
+      return Math.min(Math.max(parseFloat(globalDiscount) || 0, 0), 100);
+    } else {
+      const val = parseFloat(globalDiscountVal) || 0;
+      if (!subtotalBrutoPreview) return 0;
+      return Math.min((val / subtotalBrutoPreview) * 100, 100);
+    }
+  }, [discountMode, globalDiscount, globalDiscountVal, subtotalBrutoPreview]);
+
+  const handleDiscountPct = (raw: string) => {
+    setGlobalDiscount(raw);
+    const pct = Math.min(Math.max(parseFloat(raw) || 0, 0), 100);
+    if (subtotalBrutoPreview) setGlobalDiscountVal(pct ? String(Math.round(subtotalBrutoPreview * pct / 100)) : '');
+  };
+
+  const handleDiscountVal = (raw: string) => {
+    setGlobalDiscountVal(raw);
+    const val = parseFloat(raw) || 0;
+    if (subtotalBrutoPreview) setGlobalDiscount(val ? String(+((val / subtotalBrutoPreview) * 100).toFixed(2)) : '');
+  };
 
   // Datos cliente
   const [customerName, setCustomerName] = useState('');
@@ -364,7 +389,7 @@ const POS: React.FC = () => {
       setLastSale({ ...sale, _cartItems: cart, discountPercent: clampedDiscount, discountAmount: totals.discountAmount } as any);
       setShowInvoice(true);
       setCart([]); setPayments([]);
-      setGlobalDiscount('');
+      setGlobalDiscount(''); setGlobalDiscountVal('');
       setCustomerName(''); setCustomerDoc(''); setCustomerEmail(''); setCustomerPhone('');
       setIsPartialMode(false); setShoeRepairId(''); setShoeRepairLabel('');
       setIsPaymentModalOpen(false);
@@ -704,19 +729,45 @@ const POS: React.FC = () => {
               <span className={`text-sm font-medium flex-1 ${clampedDiscount > 0 ? 'text-orange-700' : 'text-slate-600'}`}>
                 Descuento
               </span>
-              <div className="flex items-center gap-1">
+              {/* Toggle % / $ */}
+              <div className="flex rounded-lg overflow-hidden border border-slate-300 text-xs font-bold">
+                <button
+                  onClick={() => setDiscountMode('pct')}
+                  className={`px-2 py-1 transition-colors ${discountMode === 'pct' ? 'bg-orange-500 text-white' : 'bg-white text-slate-500 hover:bg-slate-100'}`}
+                >%</button>
+                <button
+                  onClick={() => setDiscountMode('val')}
+                  className={`px-2 py-1 transition-colors ${discountMode === 'val' ? 'bg-orange-500 text-white' : 'bg-white text-slate-500 hover:bg-slate-100'}`}
+                >$</button>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 px-3 pb-2">
+              {/* Campo % */}
+              <div className="flex items-center gap-1 flex-1">
                 <input
-                  type="number"
-                  min="0"
-                  max="100"
+                  type="number" min="0" max="100"
                   value={globalDiscount}
-                  onChange={e => setGlobalDiscount(e.target.value)}
+                  onChange={e => handleDiscountPct(e.target.value)}
                   placeholder="0"
-                  className={`w-16 text-right px-2 py-1 rounded-lg border text-sm font-bold outline-none focus:ring-2 focus:ring-orange-400 ${
-                    clampedDiscount > 0 ? 'bg-white border-orange-300 text-orange-700' : 'bg-white border-slate-300 text-slate-700'
+                  className={`w-full text-right px-2 py-1 rounded-lg border text-sm font-bold outline-none focus:ring-2 focus:ring-orange-400 ${
+                    discountMode === 'pct' ? 'bg-white border-orange-300 text-orange-700' : 'bg-slate-100 border-slate-200 text-slate-400'
                   }`}
                 />
-                <span className={`text-sm font-bold ${clampedDiscount > 0 ? 'text-orange-600' : 'text-slate-500'}`}>%</span>
+                <span className={`text-sm font-bold w-4 ${clampedDiscount > 0 ? 'text-orange-600' : 'text-slate-400'}`}>%</span>
+              </div>
+              <span className="text-slate-300 text-xs">=</span>
+              {/* Campo valor */}
+              <div className="flex items-center gap-1 flex-1">
+                <span className={`text-sm font-bold w-3 ${clampedDiscount > 0 ? 'text-orange-600' : 'text-slate-400'}`}>$</span>
+                <input
+                  type="number" min="0"
+                  value={globalDiscountVal}
+                  onChange={e => handleDiscountVal(e.target.value)}
+                  placeholder="0"
+                  className={`w-full text-right px-2 py-1 rounded-lg border text-sm font-bold outline-none focus:ring-2 focus:ring-orange-400 ${
+                    discountMode === 'val' ? 'bg-white border-orange-300 text-orange-700' : 'bg-slate-100 border-slate-200 text-slate-400'
+                  }`}
+                />
               </div>
             </div>
             {clampedDiscount > 0 && (
