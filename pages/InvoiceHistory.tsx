@@ -223,7 +223,7 @@ const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, compan
 
 const InvoiceHistory: React.FC = () => {
   const { formatMoney } = useCurrency();
-  const { company, companyId, userRole, hasPermission } = useDatabase();
+  const { company, companyId, userRole, hasPermission, session, refreshAll } = useDatabase();
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(false);
@@ -343,12 +343,48 @@ const InvoiceHistory: React.FC = () => {
 
   const doDeleteInvoice = async (inv: Invoice) => {
     try {
+      // 1. Obtener items de la factura para restaurar stock
+      const { data: items } = await supabase
+        .from('invoice_items')
+        .select('product_id, quantity')
+        .eq('invoice_id', inv.id);
+
+      // 2. Eliminar items y factura
       await supabase.from('invoice_items').delete().eq('invoice_id', inv.id);
       const { error } = await supabase.from('invoices').delete().eq('id', inv.id);
       if (error) throw error;
+
+      // 3. Restaurar stock de cada producto
+      if (items && items.length > 0) {
+        for (const item of items) {
+          if (!item.product_id) continue;
+          const { data: prod } = await supabase
+            .from('products').select('stock_quantity').eq('id', item.product_id).single();
+          if (prod) {
+            await supabase.from('products')
+              .update({ stock_quantity: (prod.stock_quantity ?? 0) + item.quantity })
+              .eq('id', item.product_id);
+          }
+        }
+      }
+
+      // 4. Descontar el valor de la caja activa
+      if (session?.id) {
+        const amountPaid = inv.payment_method?.amount ?? inv.total_amount ?? 0;
+        const newTotal = Math.max(0, (session.total_sales_cash ?? 0) - amountPaid);
+        await supabase.from('cash_register_sessions')
+          .update({ total_sales_cash: newTotal })
+          .eq('id', session.id);
+      }
+
+      // 5. Actualizar UI local
       setInvoices(prev => prev.filter(i => i.id !== inv.id));
       setTotal(t => t - 1);
       if (selectedInvoice?.id === inv.id) setSelectedInvoice(null);
+
+      // 6. Refrescar contexto global (dashboard, caja)
+      await refreshAll();
+
     } catch (e: any) {
       alert('Error al eliminar: ' + e.message);
     }
