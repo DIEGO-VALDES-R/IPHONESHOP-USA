@@ -10,6 +10,46 @@ import { useBarcodeScanner } from '../hooks/useBarcodeScanner';
 import InvoiceModal from '../components/InvoiceModal';
 import { supabase } from '../supabaseClient';
 
+// ── Apertura automática del cajón al facturar ─────────────────────────────
+const ESC_POS_OPEN_DRAWER = new Uint8Array([0x1B, 0x70, 0x00, 0x19, 0xFA]);
+
+const autoOpenDrawer = async () => {
+  try {
+    const raw = localStorage.getItem('posmaster_drawer_config');
+    if (!raw) return; // sin config = sin cajón configurado
+    const config = JSON.parse(raw);
+    const protocol = config.protocol || 'escpos-usb';
+
+    if (protocol === 'escpos-usb') {
+      if (!('usb' in navigator)) return;
+      const devices = await (navigator as any).usb.getDevices();
+      if (devices.length === 0) return; // sin permiso previo = no intentar
+      const device = devices[0];
+      await device.open();
+      if (device.configuration === null) await device.selectConfiguration(1);
+      await device.claimInterface(0);
+      const endpoint = device.configuration.interfaces[0].alternate.endpoints
+        .find((e: any) => e.direction === 'out');
+      if (endpoint) await device.transferOut(endpoint.endpointNumber, ESC_POS_OPEN_DRAWER);
+      await device.close();
+
+    } else if (protocol === 'escpos-network') {
+      const ip = config.networkIp || '192.168.1.100';
+      const port = config.networkPort || 9100;
+      const hexCmd = Array.from(ESC_POS_OPEN_DRAWER).map((b: number) => b.toString(16).padStart(2, '0')).join('');
+      await fetch(`http://localhost:8765/rawprint?ip=${ip}&port=${port}&hex=${hexCmd}`, { signal: AbortSignal.timeout(2000) }).catch(() => {});
+
+    } else if (protocol === 'windows-print') {
+      const printer = config.windowsPrinter || '';
+      const html = `<html><head><style>body{margin:0}</style><script>
+        window.onload=function(){document.title='${printer ? `\\\\localhost\\${printer}` : ''}';window.print();setTimeout(function(){window.close();},500);};
+      </sc` + `ript></head><body><p style="font-size:1px;color:white;">.</p></body></html>`;
+      const w = window.open('', '_blank', 'width=1,height=1,top=-100,left=-100');
+      if (w) w.document.write(html);
+    }
+  } catch { /* silencioso — no interrumpir la venta */ }
+};
+
 const POS: React.FC = () => {
   const { formatMoney } = useCurrency();
   const { products, session, processSale, company, refreshAll } = useDatabase();
@@ -376,6 +416,11 @@ const POS: React.FC = () => {
 
       setLastSale({ ...sale, _cartItems: cart, discountPercent: clampedDiscount, discountAmount: totals.discountAmount } as any);
       setShowInvoice(true);
+
+      // Abrir cajón automáticamente si hay pago en efectivo
+      const hasCash = payments.some(p => p.method === PaymentMethod.CASH);
+      if (hasCash) autoOpenDrawer();
+
       setCart([]); setPayments([]);
       setGlobalDiscount(''); setGlobalDiscountVal('');
       setCustomerName(''); setCustomerDoc(''); setCustomerEmail(''); setCustomerPhone('');
