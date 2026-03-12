@@ -8,6 +8,7 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner';
 import InvoiceModal from '../components/InvoiceModal';
+import PayPalCheckout from '../components/PayPalCheckout';
 import { supabase } from '../supabaseClient';
 
 // ── Apertura automática del cajón al facturar ─────────────────────────────
@@ -66,6 +67,13 @@ const POS: React.FC = () => {
   // IVA Toggle — usa la tasa configurada en Settings
   const defaultTaxRate = company?.config?.tax_rate ?? 19;
   const [applyIva, setApplyIva] = useState(true);
+
+  // ── PAYPAL CONFIG ─────────────────────────────────────────────────────────
+  const paypalConfig = (company?.config as any)?.payment_providers?.paypal;
+  const paypalEnabled = paypalConfig?.enabled && paypalConfig?.client_id;
+  const [showPaypalModal, setShowPaypalModal] = useState(false);
+  const [paypalLoading, setPaypalLoading] = useState(false);
+  const [paypalAmount, setPaypalAmount] = useState(0);
 
   // ── DESCUENTO GLOBAL DEL CARRITO ──────────────────────────────────────────
   const [discountMode, setDiscountMode] = useState<'pct' | 'val'>('pct');
@@ -865,7 +873,9 @@ const POS: React.FC = () => {
                     ) : payments.map((p, idx) => (
                       <div key={idx} className="flex justify-between items-center bg-white p-2 rounded border border-slate-100 shadow-sm mb-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold bg-slate-200 px-2 rounded">{p.method}</span>
+                          <span className="text-xs font-bold bg-slate-200 px-2 rounded">
+                            {p.method === 'CASH' ? '💵 Efectivo' : p.method === 'CARD' ? '💳 Tarjeta' : p.method === 'TRANSFER' ? '🏛️ Transf.' : p.method === 'PAYPAL' ? '🅿️ PayPal' : p.method === 'CREDIT' ? '⏳ Crédito' : p.method}
+                          </span>
                           <span className="font-mono">{formatMoney(p.amount)}</span>
                         </div>
                         <button onClick={() => removePayment(idx)} className="text-red-500"><Trash2 size={14} /></button>
@@ -903,6 +913,16 @@ const POS: React.FC = () => {
                         {m === 'CASH' ? 'Efectivo' : m === 'CARD' ? 'Tarjeta' : m === 'CREDIT' ? 'Credito' : 'Transf.'}
                       </button>
                     ))}
+                    {paypalEnabled && (
+                      <button onClick={() => {
+                        setPaypalAmount(Math.round(totals.remaining > 0 ? totals.remaining : totals.total));
+                        setShowPaypalModal(true);
+                      }}
+                        className="py-2 px-3 rounded-lg border text-sm font-medium transition-all bg-[#0070BA] text-white border-[#0070BA] hover:bg-[#005ea6] flex items-center justify-center gap-1.5 col-span-2">
+                        <span className="font-black tracking-tight">Pay</span><span className="font-light tracking-tight">Pal</span>
+                        <span className="opacity-80 text-xs ml-1">— {formatMoney(Math.round(totals.remaining > 0 ? totals.remaining : totals.total))}</span>
+                      </button>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <input type="number" className="flex-1 border border-slate-300 rounded-lg px-4 py-2 text-lg font-bold" placeholder="0"
@@ -929,6 +949,50 @@ const POS: React.FC = () => {
                 className="px-6 py-3 rounded-lg bg-green-600 text-white font-bold hover:bg-green-700 disabled:bg-slate-300 flex items-center gap-2">
                 <Printer size={20} /> {isPartialMode && totals.remaining > 100 ? 'Facturar con Abono' : 'Facturar e Imprimir'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      )}
+
+      {/* ── MODAL PAYPAL ──────────────────────────────────────────────── */}
+      {showPaypalModal && paypalConfig && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="bg-[#0070BA] px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-white font-black text-xl tracking-tight">Pay</span>
+                <span className="text-white font-light text-xl tracking-tight">Pal</span>
+              </div>
+              <button onClick={() => setShowPaypalModal(false)} className="text-white/70 hover:text-white"><X size={20} /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="text-center">
+                <p className="text-slate-500 text-sm">Monto a cobrar</p>
+                <p className="text-3xl font-black text-slate-900">{formatMoney(paypalAmount)}</p>
+              </div>
+              <div id="paypal-button-container" className="min-h-[50px]">
+                {paypalLoading && (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="w-6 h-6 border-2 border-[#0070BA] border-t-transparent rounded-full animate-spin" />
+                    <span className="ml-2 text-sm text-slate-500">Cargando PayPal...</span>
+                  </div>
+                )}
+              </div>
+              <PayPalCheckout
+                clientId={paypalConfig.client_id}
+                env={paypalConfig.env || 'production'}
+                amount={paypalAmount}
+                currency="USD"
+                onApprove={(orderId: string) => {
+                  setPayments(prev => [...prev, { method: PaymentMethod.PAYPAL, amount: paypalAmount }]);
+                  setShowPaypalModal(false);
+                  toast.success(`✅ Pago PayPal aprobado (${orderId})`);
+                }}
+                onError={() => { toast.error('Error en el pago PayPal'); }}
+                setLoading={setPaypalLoading}
+              />
+              <p className="text-xs text-slate-400 text-center">El pago se procesa directamente en PayPal. POSmaster no almacena datos de tarjetas.</p>
             </div>
           </div>
         </div>

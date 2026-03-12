@@ -76,9 +76,9 @@ const Settings: React.FC = () => {
 
   const plan = safeCompany.subscription_plan || 'BASIC';
   const ALLOWED_PAYMENT_METHODS: Record<string, string[]> = {
-    BASIC:      ['cash', 'transfer'],
-    PRO:        ['cash', 'transfer', 'wompi'],
-    ENTERPRISE: ['cash', 'transfer', 'wompi', 'bold', 'payu', 'dataphone'],
+    BASIC:      ['cash', 'transfer', 'paypal'],
+    PRO:        ['cash', 'transfer', 'wompi', 'paypal'],
+    ENTERPRISE: ['cash', 'transfer', 'wompi', 'bold', 'payu', 'dataphone', 'paypal'],
   };
   const allowedMethods = ALLOWED_PAYMENT_METHODS[plan] || ALLOWED_PAYMENT_METHODS['BASIC'];
 
@@ -157,6 +157,7 @@ const Settings: React.FC = () => {
     wompi:     { enabled: false, label: 'Wompi',                icon: '🏦', pub_key: '', env: 'prod' },
     bold:      { enabled: false, label: 'Bold',                 icon: '⚡', api_key: '' },
     payu:      { enabled: false, label: 'PayU',                 icon: '💳', merchant_id: '', api_key: '', api_login: '' },
+    paypal:    { enabled: false, label: 'PayPal',               icon: '🅿️', client_id: '', env: 'production' },
   });
   const [savingPayments, setSavingPayments] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -1082,6 +1083,55 @@ const Settings: React.FC = () => {
                 )}
               </div>
 
+
+            )}
+            {allowedMethods.includes('paypal') && (
+              <div className={`bg-white p-5 rounded-xl shadow-sm border-2 ${paymentProviders.paypal?.enabled ? 'border-blue-500' : 'border-slate-200'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🅿️</span>
+                    <div>
+                      <p className="font-bold text-slate-800">PayPal</p>
+                      <p className="text-xs text-slate-500">Acepta pagos internacionales con PayPal. El cliente paga en la ventana de PayPal y el dinero llega a tu cuenta PayPal Business.</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={paymentProviders.paypal?.enabled || false}
+                      onChange={e => setPaymentProviders(p => ({ ...p, paypal: { ...(p.paypal || {}), enabled: e.target.checked } }))} />
+                    <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                  </label>
+                </div>
+                {paymentProviders.paypal?.enabled && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Client ID de tu cuenta PayPal Business</label>
+                        <input type="text" placeholder="AXxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                          value={paymentProviders.paypal?.client_id || ''}
+                          onChange={e => setPaymentProviders(p => ({ ...p, paypal: { ...(p.paypal || {}), client_id: e.target.value } }))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 outline-none font-mono" />
+                        <p className="text-xs text-slate-400 mt-1">Solo el Client ID (público). Encuéntralo en <strong>developer.paypal.com → My Apps → tu app → Client ID</strong>.</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Ambiente</label>
+                        <select value={paymentProviders.paypal?.env || 'production'}
+                          onChange={e => setPaymentProviders(p => ({ ...p, paypal: { ...(p.paypal || {}), env: e.target.value } }))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-400 outline-none">
+                          <option value="production">Producción (dinero real)</option>
+                          <option value="sandbox">Sandbox (pruebas)</option>
+                        </select>
+                      </div>
+                      <div className="flex items-end">
+                        <a href="https://developer.paypal.com/dashboard/applications" target="_blank" rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:underline">🔗 Obtener mi Client ID en PayPal Developer</a>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-800">
+                      ✅ Al cobrar con PayPal, el POS cargará el botón oficial de PayPal con el monto exacto. El cliente completa el pago en la ventana de PayPal. <strong>Solo necesitas el Client ID</strong> — no se requiere servidor ni webhooks para cobrar.
+                    </div>
+                  </div>
+                )}
+              </div>
 
             )}
             {/* BOTÓN GUARDAR */}

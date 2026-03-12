@@ -36,7 +36,8 @@ export enum PaymentMethod {
   CASH = 'CASH',
   CARD = 'CARD',
   TRANSFER = 'TRANSFER',
-  CREDIT = 'CREDIT'
+  CREDIT = 'CREDIT',
+  PAYPAL = 'PAYPAL'
 }
 
 export enum RepairStatus {
