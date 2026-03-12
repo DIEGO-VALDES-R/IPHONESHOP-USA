@@ -22,6 +22,7 @@ import Veterinaria from './pages/Veterinaria';
 import Supplies from './pages/Supplies';
 import Farmacia from './pages/Farmacia';
 import Customers from './pages/Customers';
+import Nomina from './pages/Nomina';
 import { LandingPage, RegisterPage, AdminPanel, ClientPortal } from './LandingPage';
 import { ContractSign } from './ContractSign';
 import AcceptInvitation from './AcceptInvitation';
@@ -326,6 +327,7 @@ const AppRoutes: React.FC = () => (
     <Route path="/supplies"     element={<Supplies />} />
     <Route path="/farmacia"     element={<Farmacia />} />
     <Route path="/customers"    element={<Customers />} />
+    <Route path="/nomina"       element={<Nomina />} />
   </Routes>
 );
 

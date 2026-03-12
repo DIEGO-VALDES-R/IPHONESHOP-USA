@@ -953,7 +953,6 @@ const POS: React.FC = () => {
           </div>
         </div>
       )}
-      )}
 
       {/* ── MODAL PAYPAL ──────────────────────────────────────────────── */}
       {showPaypalModal && paypalConfig && (

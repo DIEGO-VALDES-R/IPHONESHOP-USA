@@ -5,7 +5,7 @@ import {
   Settings, LogOut, Menu, Building2, User,
   Landmark, FileText, Globe, Receipt, ShieldCheck, Users, Utensils, ChefHat,
   Scissors, Stethoscope, FlaskConical, PawPrint, Pill, UserRound,
-  ChevronDown, ChevronRight, ExternalLink,
+  ChevronDown, ChevronRight, ExternalLink, Users2,
 } from 'lucide-react';
 import { useCurrency, CurrencyCode } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
@@ -46,6 +46,7 @@ const MODULE_PATHS: Record<string, string> = {
   receivables: '/receivables',
   supplies:    '/supplies',
   team:        '/team',
+  nomina:      '/nomina',
 };
 
 function getNavItems(
@@ -99,6 +100,7 @@ function getNavItems(
     { label: 'Cartera / CxC', path: MODULE_PATHS.receivables, icon: FileText,     show: p('can_view_reports') },
     { label: 'Insumos',       path: MODULE_PATHS.supplies,    icon: FlaskConical, show: isAdmin },
     { label: 'Equipo',        path: MODULE_PATHS.team,        icon: Users,        show: isPro && p('can_manage_team') },
+    { label: 'Nómina',        path: MODULE_PATHS.nomina,      icon: Users2,       show: isAdmin },
   );
 
   return items.filter(i => i.show);

@@ -173,7 +173,7 @@ interface TurnInvoice {
 }
 
 const CashControl: React.FC = () => {
-  const { session, openSession, closeSession, sessionsHistory, companyId, refreshAll } = useDatabase();
+  const { session, openSession, closeSession, sessionsHistory, companyId, branchId, refreshAll } = useDatabase();
   const [openAmount, setOpenAmount] = useState('');
   const [closeAmount, setCloseAmount] = useState('');
   const [notes, setNotes] = useState('');
@@ -200,13 +200,16 @@ const CashControl: React.FC = () => {
       }
       setLoadingInvoices(true);
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('invoices')
           .select('id, invoice_number, total_amount, created_at, payment_method')
           .eq('company_id', companyId)
           .gte('created_at', session.start_time)
           .order('created_at', { ascending: false });
 
+        if (branchId) query = query.eq('branch_id', branchId);
+
+        const { data, error } = await query;
         if (error) throw error;
         setTurnInvoices(data || []);
       } catch (e: any) {
@@ -217,7 +220,7 @@ const CashControl: React.FC = () => {
     };
 
     loadTurnInvoices();
-  }, [session, companyId]);
+  }, [session, companyId, branchId]);
 
   const handleOpenRegister = (e: React.FormEvent) => {
     e.preventDefault();
