@@ -22,7 +22,6 @@ import Veterinaria from './pages/Veterinaria';
 import Supplies from './pages/Supplies';
 import Farmacia from './pages/Farmacia';
 import Customers from './pages/Customers';
-import Nomina from './pages/Nomina';
 import { LandingPage, RegisterPage, AdminPanel, ClientPortal } from './LandingPage';
 import { ContractSign } from './ContractSign';
 import AcceptInvitation from './AcceptInvitation';
@@ -33,11 +32,11 @@ import { Toaster } from 'react-hot-toast';
 // Crear archivo .env en la raíz del proyecto con estas variables:
 //   VITE_WHATSAPP_NUMBER=573204884943
 //   VITE_BOLD_PAYMENT_URL=https://checkout.bold.co/payment/LNK_U58X7N71NX
-//   VITE_CONTACT_EMAIL=diegoferrangel@gmail.com
+//   VITE_CONTACT_EMAIL=info@posmaster.org
 // El super admin ya NO está hardcodeado — se verifica contra la BD
 const WHATSAPP_NUMBER    = import.meta.env.VITE_WHATSAPP_NUMBER    || '573204884943';
 const BOLD_PAYMENT_URL   = import.meta.env.VITE_BOLD_PAYMENT_URL   || 'https://checkout.bold.co/payment/LNK_U58X7N71NX';
-const CONTACT_EMAIL      = import.meta.env.VITE_CONTACT_EMAIL      || 'diegoferrangel@gmail.com';
+const CONTACT_EMAIL      = import.meta.env.VITE_CONTACT_EMAIL      || 'info@posmaster.org';
 
 // ── CORRECCIÓN AUTH-02 — Rate Limiting PIN ────────────────────────────────────
 // Máximo 5 intentos de PIN por sesión, bloqueo de 15 minutos
@@ -127,7 +126,7 @@ const PastDueScreen: React.FC<{ email: string; onRetry: () => void }> = ({ email
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 const Login: React.FC<{ onShowLanding: () => void; onShowRegister: () => void }> = ({ onShowLanding, onShowRegister }) => {
-  const [mode, setMode] = useState<'normal' | 'pin' | 'pin-found'>('normal');
+  const [mode, setMode] = useState<'normal' | 'pin' | 'pin-found' | 'forgot' | 'forgot-sent'>('normal');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [pinDigits, setPinDigits] = useState(['', '', '', '']);
@@ -138,7 +137,6 @@ const Login: React.FC<{ onShowLanding: () => void; onShowRegister: () => void }>
   const { checkLocked, registerFailedAttempt, registerSuccess, remainingAttempts } = usePinRateLimit();
   const [lockMsg, setLockMsg] = useState('');
 
-  // Actualiza el mensaje de bloqueo cada segundo si está bloqueado
   useEffect(() => {
     const interval = setInterval(() => {
       const { locked, remainingMs } = checkLocked();
@@ -159,41 +157,41 @@ const Login: React.FC<{ onShowLanding: () => void; onShowRegister: () => void }>
     setLoading(false);
   };
 
+  // ── Enviar email de reset ──
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) { setError('Ingresa tu email'); return; }
+    setLoading(true); setError('');
+    const redirectTo = `${window.location.origin}/#/reset-password`;
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    setLoading(false);
+    if (resetError) { setError(resetError.message); return; }
+    setMode('forgot-sent');
+  };
+
   const handlePinLogin = async () => {
-    // ── Verificar rate limit antes de consultar ──
     const { locked, remainingMs } = checkLocked();
     if (locked) {
       const mins = Math.ceil(remainingMs / 60000);
       setError(`Demasiados intentos fallidos. Espera ${mins} minuto(s).`);
       return;
     }
-
     const fullPin = pinDigits.join('');
     if (fullPin.length !== 4) { setError('Ingresa los 4 dígitos'); return; }
     setLoading(true); setError('');
-
     try {
-      // ── CORRECCIÓN SUP-04 — Verificar PIN con hash via función SQL ──
-      const { data, error: pErr } = await supabase
-        .rpc('verify_pin', { input_pin: fullPin });
-
+      const { data, error: pErr } = await supabase.rpc('verify_pin', { input_pin: fullPin });
       if (pErr || !data || data.length === 0) {
         registerFailedAttempt();
         const left = remainingAttempts() - 1;
-        setError(left > 0
-          ? `PIN incorrecto. ${left} intento(s) restantes.`
-          : 'Cuenta bloqueada por 15 minutos.'
-        );
+        setError(left > 0 ? `PIN incorrecto. ${left} intento(s) restantes.` : 'Cuenta bloqueada por 15 minutos.');
         setLoading(false);
         return;
       }
-
       registerSuccess();
       setEmail(data[0].user_email || '');
       setMode('pin-found');
-    } catch (err: any) {
-      setError(err.message);
-    }
+    } catch (err: any) { setError(err.message); }
     setLoading(false);
   };
 
@@ -205,6 +203,18 @@ const Login: React.FC<{ onShowLanding: () => void; onShowRegister: () => void }>
     if (!v && i > 0) document.getElementById(`pind-${i-1}`)?.focus();
   };
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '11px 14px',
+    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
+    borderRadius: 10, color: '#f1f5f9', fontSize: 15, outline: 'none', boxSizing: 'border-box',
+  };
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 6 };
+  const errorBox = error && (
+    <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', fontSize: 14, padding: '10px 14px', borderRadius: 8 }}>
+      {error}
+    </div>
+  );
+
   return (
     <div style={{ minHeight: '100vh', background: '#0a0f1e', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: "'DM Sans','Segoe UI',sans-serif" }}>
       <div style={{ width: '100%', maxWidth: 420 }}>
@@ -212,39 +222,94 @@ const Login: React.FC<{ onShowLanding: () => void; onShowRegister: () => void }>
         <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 24, padding: 40 }}>
           <div style={{ textAlign: 'center', marginBottom: 24 }}>
             <div style={{ width: 52, height: 52, background: 'linear-gradient(135deg,#3b82f6,#8b5cf6)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, margin: '0 auto 14px', color: '#fff' }}>PM</div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9', marginBottom: 6 }}>Bienvenido a POSmaster</h1>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9', marginBottom: 6 }}>
+              {mode === 'forgot' || mode === 'forgot-sent' ? 'Restablecer contraseña' : 'Bienvenido a POSmaster'}
+            </h1>
           </div>
 
-          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: 4, marginBottom: 24 }}>
-            <button onClick={() => { setMode('normal'); setError(''); }} style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: mode === 'normal' ? 'rgba(59,130,246,0.3)' : 'transparent', color: mode === 'normal' ? '#93c5fd' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-              📧 Email / Contraseña
-            </button>
-            <button onClick={() => { setMode('pin'); setError(''); setPinDigits(['','','','']); }} style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: mode === 'pin' ? 'rgba(16,185,129,0.3)' : 'transparent', color: mode === 'pin' ? '#6ee7b7' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-              🔢 PIN Rápido
-            </button>
-          </div>
+          {/* ── Tabs (solo en modos normales) ── */}
+          {(mode === 'normal' || mode === 'pin' || mode === 'pin-found') && (
+            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: 4, marginBottom: 24 }}>
+              <button onClick={() => { setMode('normal'); setError(''); }}
+                style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: mode === 'normal' ? 'rgba(59,130,246,0.3)' : 'transparent', color: mode === 'normal' ? '#93c5fd' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                📧 Email / Contraseña
+              </button>
+              <button onClick={() => { setMode('pin'); setError(''); setPinDigits(['','','','']); }}
+                style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: mode === 'pin' ? 'rgba(16,185,129,0.3)' : 'transparent', color: mode === 'pin' ? '#6ee7b7' : '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                🔢 PIN Rápido
+              </button>
+            </div>
+          )}
 
-          {/* Login normal */}
+          {/* ── Login normal ── */}
           {mode === 'normal' && (
             <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>Email</label>
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="tu@email.com"
-                  style={{ width: '100%', padding: '11px 14px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, color: '#f1f5f9', fontSize: 15, outline: 'none', boxSizing: 'border-box' as const }} />
+                <label style={labelStyle}>Email</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="tu@email.com" style={inputStyle} />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>Contraseña</label>
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••"
-                  style={{ width: '100%', padding: '11px 14px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, color: '#f1f5f9', fontSize: 15, outline: 'none', boxSizing: 'border-box' as const }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <label style={{ ...labelStyle, marginBottom: 0 }}>Contraseña</label>
+                  <button type="button" onClick={() => { setMode('forgot'); setError(''); }}
+                    style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                </div>
+                <input type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" style={inputStyle} />
               </div>
-              {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', fontSize: 14, padding: '10px 14px', borderRadius: 8 }}>{error}</div>}
-              <button type="submit" disabled={loading} style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', color: '#fff', padding: '12px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, opacity: loading ? 0.7 : 1 }}>
+              {errorBox}
+              <button type="submit" disabled={loading}
+                style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', color: '#fff', padding: '12px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, opacity: loading ? 0.7 : 1 }}>
                 {loading ? 'Verificando...' : 'Ingresar'}
+              </button>
+              <p style={{ textAlign: 'center', marginTop: 4, fontSize: 14, color: '#475569' }}>
+                ¿No tienes cuenta?{' '}
+                <button onClick={onShowRegister} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>Registrarse gratis</button>
+              </p>
+            </form>
+          )}
+
+          {/* ── Olvidé mi contraseña ── */}
+          {mode === 'forgot' && (
+            <form onSubmit={handleForgot} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 4 }}>
+                Ingresa tu email y te enviaremos un link para restablecer tu contraseña.
+              </p>
+              <div>
+                <label style={labelStyle}>Email</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="tu@email.com" autoFocus style={inputStyle} />
+              </div>
+              {errorBox}
+              <button type="submit" disabled={loading}
+                style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', color: '#fff', padding: '12px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, opacity: loading ? 0.7 : 1 }}>
+                {loading ? 'Enviando...' : '📧 Enviar link de restablecimiento'}
+              </button>
+              <button type="button" onClick={() => { setMode('normal'); setError(''); }}
+                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                ← Volver al inicio de sesión
               </button>
             </form>
           )}
 
-          {/* Login PIN */}
+          {/* ── Email enviado ── */}
+          {mode === 'forgot-sent' && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 52, marginBottom: 16 }}>📬</div>
+              <p style={{ color: '#f1f5f9', fontWeight: 700, fontSize: 16, marginBottom: 8 }}>¡Revisa tu bandeja!</p>
+              <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 24 }}>
+                Enviamos un link a <strong style={{ color: '#93c5fd' }}>{email}</strong>.<br />
+                Haz clic en el link para crear una nueva contraseña.<br />
+                <span style={{ fontSize: 11, opacity: 0.6 }}>El link expira en 1 hora.</span>
+              </p>
+              <button onClick={() => { setMode('normal'); setError(''); setEmail(''); }}
+                style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                ← Volver al inicio de sesión
+              </button>
+            </div>
+          )}
+
+          {/* ── Login PIN ── */}
           {mode === 'pin' && (
             <div>
               <p style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', marginBottom: 20 }}>Ingresa tu PIN de 4 dígitos</p>
@@ -258,16 +323,12 @@ const Login: React.FC<{ onShowLanding: () => void; onShowRegister: () => void }>
                     style={{ width: 56, height: 64, textAlign: 'center', fontSize: 28, fontWeight: 800, background: 'rgba(255,255,255,0.06)', border: `2px solid ${pinDigits[i] ? '#10b981' : 'rgba(255,255,255,0.12)'}`, borderRadius: 12, color: '#f1f5f9', outline: 'none' }} />
                 ))}
               </div>
-
-              {/* Mensaje de bloqueo */}
               {lockMsg && (
                 <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', fontSize: 13, padding: '10px 14px', borderRadius: 8, marginBottom: 12, textAlign: 'center' }}>
                   🔒 {lockMsg}
                 </div>
               )}
-
               {error && !lockMsg && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', fontSize: 13, padding: '10px 14px', borderRadius: 8, marginBottom: 12, textAlign: 'center' }}>{error}</div>}
-
               <button onClick={handlePinLogin} disabled={loading || pinDigits.join('').length < 4 || !!checkLocked().locked}
                 style={{ width: '100%', background: 'linear-gradient(135deg,#10b981,#059669)', border: 'none', color: '#fff', padding: '12px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, opacity: (loading || pinDigits.join('').length < 4 || !!checkLocked().locked) ? 0.5 : 1 }}>
                 {loading ? 'Buscando...' : '→ Entrar con PIN'}
@@ -275,29 +336,94 @@ const Login: React.FC<{ onShowLanding: () => void; onShowRegister: () => void }>
             </div>
           )}
 
-          {/* PIN encontrado — pedir contraseña */}
+          {/* ── PIN encontrado — pedir contraseña ── */}
           {mode === 'pin-found' && (
             <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 10, padding: '10px 14px', marginBottom: 4 }}>
                 <p style={{ color: '#6ee7b7', fontSize: 13 }}>✅ PIN válido — cuenta: <strong>{email}</strong></p>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>Contraseña</label>
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)} required autoFocus placeholder="••••••••"
-                  style={{ width: '100%', padding: '11px 14px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, color: '#f1f5f9', fontSize: 15, outline: 'none', boxSizing: 'border-box' as const }} />
+                <label style={labelStyle}>Contraseña</label>
+                <input type="password" value={password} onChange={e => setPassword(e.target.value)} required autoFocus placeholder="••••••••" style={inputStyle} />
               </div>
-              {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', fontSize: 14, padding: '10px 14px', borderRadius: 8 }}>{error}</div>}
-              <button type="submit" disabled={loading} style={{ background: 'linear-gradient(135deg,#10b981,#059669)', border: 'none', color: '#fff', padding: '12px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, opacity: loading ? 0.7 : 1 }}>
+              {errorBox}
+              <button type="submit" disabled={loading}
+                style={{ background: 'linear-gradient(135deg,#10b981,#059669)', border: 'none', color: '#fff', padding: '12px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, opacity: loading ? 0.7 : 1 }}>
                 {loading ? 'Ingresando...' : '→ Confirmar e ingresar'}
               </button>
             </form>
           )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
-          {mode === 'normal' && (
-            <p style={{ textAlign: 'center', marginTop: 20, fontSize: 14, color: '#475569' }}>
-              ¿No tienes cuenta?{' '}
-              <button onClick={onShowRegister} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>Registrarse gratis</button>
-            </p>
+// ── PANTALLA DE RESET DE CONTRASEÑA ──────────────────────────────────────────
+// Se muestra cuando el usuario llega desde el link del email de reset
+const ResetPassword: React.FC = () => {
+  const [password, setPassword] = useState('');
+  const [password2, setPassword2] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password.length < 6) { setError('Mínimo 6 caracteres'); return; }
+    if (password !== password2) { setError('Las contraseñas no coinciden'); return; }
+    setLoading(true); setError('');
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+    setLoading(false);
+    if (updateError) { setError(updateError.message); return; }
+    setDone(true);
+    // Redirigir al login tras 2 segundos
+    setTimeout(() => { window.location.hash = '/'; }, 2500);
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '11px 14px',
+    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
+    borderRadius: 10, color: '#f1f5f9', fontSize: 15, outline: 'none', boxSizing: 'border-box',
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#0a0f1e', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: "'DM Sans','Segoe UI',sans-serif" }}>
+      <div style={{ width: '100%', maxWidth: 420 }}>
+        <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 24, padding: 40 }}>
+          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+            <div style={{ width: 52, height: 52, background: 'linear-gradient(135deg,#3b82f6,#8b5cf6)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, margin: '0 auto 14px', color: '#fff' }}>PM</div>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: '#f1f5f9', marginBottom: 6 }}>
+              {done ? '✅ Contraseña actualizada' : 'Nueva contraseña'}
+            </h1>
+            {!done && <p style={{ color: '#64748b', fontSize: 13 }}>Ingresa tu nueva contraseña para POSmaster</p>}
+          </div>
+
+          {done ? (
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ color: '#6ee7b7', fontSize: 14, marginBottom: 8 }}>¡Tu contraseña se guardó correctamente!</p>
+              <p style={{ color: '#475569', fontSize: 12 }}>Redirigiendo al inicio de sesión...</p>
+            </div>
+          ) : (
+            <form onSubmit={handleReset} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>Nueva contraseña</label>
+                <input type="password" value={password} onChange={e => setPassword(e.target.value)} required autoFocus placeholder="Mínimo 6 caracteres" style={inputStyle} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#94a3b8', marginBottom: 6 }}>Confirmar contraseña</label>
+                <input type="password" value={password2} onChange={e => setPassword2(e.target.value)} required placeholder="Repite la contraseña" style={inputStyle} />
+              </div>
+              {error && (
+                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', fontSize: 14, padding: '10px 14px', borderRadius: 8 }}>
+                  {error}
+                </div>
+              )}
+              <button type="submit" disabled={loading}
+                style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: 'none', color: '#fff', padding: '13px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, opacity: loading ? 0.7 : 1 }}>
+                {loading ? 'Guardando...' : '🔒 Guardar nueva contraseña'}
+              </button>
+            </form>
           )}
         </div>
       </div>
@@ -327,7 +453,6 @@ const AppRoutes: React.FC = () => (
     <Route path="/supplies"     element={<Supplies />} />
     <Route path="/farmacia"     element={<Farmacia />} />
     <Route path="/customers"    element={<Customers />} />
-    <Route path="/nomina"       element={<Nomina />} />
   </Routes>
 );
 
@@ -340,15 +465,14 @@ const App: React.FC = () => {
   const [view, setView] = useState<AppView>('landing');
   const [userEmail, setUserEmail] = useState('');
   const [previewCompanyId, setPreviewCompanyId] = useState<string | null>(null);
-  const [daysUntilExpiry, setDaysUntilExpiry] = useState<number | null>(null);
 
   const contractTokenMatch  = window.location.hash.match(/^#\/contrato\/([a-f0-9]{64})$/);
   const contractToken       = contractTokenMatch ? contractTokenMatch[1] : null;
   const invitationTokenMatch = window.location.hash.match(/^#\/invitacion\/([a-f0-9]{32})$/);
   const invitationToken     = invitationTokenMatch ? invitationTokenMatch[1] : null;
-  // Ruta de sucursal directa — abre la sucursal en su propio contexto (nueva pestaña)
-  const branchRouteMatch = window.location.hash.match(/^#\/sucursal\/([0-9a-f-]{36})$/);
-  const branchRouteId    = branchRouteMatch ? branchRouteMatch[1] : null;
+  // Detectar si venimos del link de reset de contraseña de Supabase
+  // Supabase redirige a: /#/reset-password con la sesión ya establecida via PKCE
+  const isResetPassword = window.location.hash.startsWith('#/reset-password');
 
   const retryCheck = async () => {
     const { data: { session: s } } = await supabase.auth.getSession();
@@ -401,43 +525,12 @@ const App: React.FC = () => {
         let status = company.subscription_status;
         if (company.subscription_end_date) {
           const today = new Date().toISOString().split('T')[0];
-          const endDate = new Date(company.subscription_end_date);
-          const todayDate = new Date(today);
-          const diffMs = endDate.getTime() - todayDate.getTime();
-          const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-
           if (company.subscription_end_date < today && status === 'ACTIVE') {
             await supabase.from('companies').update({ subscription_status: 'PAST_DUE' }).eq('id', profile.company_id);
             status = 'PAST_DUE';
-          } else if (diffDays <= 7 && status === 'ACTIVE') {
-            // Quedan 7 días o menos → mostrar banner de aviso
-            setDaysUntilExpiry(diffDays);
           }
         }
         setView(resolveView(status));
-
-        // Si venía de un link de sucursal antes del login, verificar pertenencia y redirigir
-        const branchRedirect = sessionStorage.getItem('branch_redirect');
-        if (branchRedirect && resolveView(status) === 'app') {
-          // Verificar que el usuario logueado pertenece a esta empresa/sucursal
-          const { data: branchProfile } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('id', session.user.id)
-            .eq('company_id', branchRedirect)
-            .maybeSingle();
-
-          if (branchProfile) {
-            // Pertenece a esta sucursal → marcar como verificado y redirigir
-            sessionStorage.setItem('branch_verified', branchRedirect);
-            sessionStorage.removeItem('branch_redirect');
-            window.location.hash = `/sucursal/${branchRedirect}`;
-          } else {
-            // No pertenece a esta sucursal → limpiar y entrar a su empresa normal
-            sessionStorage.removeItem('branch_redirect');
-            sessionStorage.removeItem('branch_verified');
-          }
-        }
       } catch {
         setView('landing');
       }
@@ -452,53 +545,9 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  if (isResetPassword) return <><Toaster position="top-right" /><ResetPassword /></>;
   if (contractToken)   return <ContractSign token={contractToken} />;
   if (invitationToken) return <><Toaster position="top-right" /><AcceptInvitation token={invitationToken} /></>;
-
-  // ── Vista directa de sucursal ─────────────────────────────────────────────
-  // El link /#/sucursal/:id SIEMPRE pide credenciales de empleado.
-  // Si hay sesión del dueño activa, se ignora — el empleado debe ingresar
-  // con su propio email/contraseña para acceder a su sucursal.
-  if (branchRouteId && !checking) {
-    // Verificar si la sesión activa pertenece a esta sucursal específica
-    const verifiedForThisBranch = sessionStorage.getItem('branch_verified') === branchRouteId;
-
-    if (!session || !verifiedForThisBranch) {
-      // Guardar el intent y forzar login
-      sessionStorage.setItem('branch_redirect', branchRouteId);
-      sessionStorage.removeItem('branch_verified');
-      return (
-        <>
-          <Toaster position="top-right" />
-          <Login onShowLanding={() => { window.location.hash = '/'; }} onShowRegister={() => setView('register')} />
-        </>
-      );
-    }
-    // Sesión verificada como perteneciente a esta sucursal → entrar
-    return (
-      <>
-        <Toaster position="top-right" />
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
-          background: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
-          color: '#fff', padding: '8px 20px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans','Segoe UI',sans-serif",
-        }}>
-          <span>🏢 Sucursal</span>
-        </div>
-        <div style={{ paddingTop: 42 }}>
-          <Router>
-            <DatabaseProvider overrideCompanyId={branchRouteId}>
-              <Routes>
-                <Route path="/*" element={<Layout onAdminPanel={undefined}><AppRoutes /></Layout>} />
-              </Routes>
-            </DatabaseProvider>
-          </Router>
-        </div>
-      </>
-    );
-  }
 
   if (checking) return (
     <div style={{ minHeight: '100vh', background: '#0a0f1e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Sans','Segoe UI',sans-serif" }}>
@@ -534,44 +583,16 @@ const App: React.FC = () => {
     </>
   );
 
-  const waExpiry = encodeURIComponent(`Hola, quiero renovar mi suscripción de POSmaster antes de que venza.`);
-
   return (
     <>
       <Toaster position="top-right" />
-      {/* Banner de expiración próxima */}
-      {daysUntilExpiry !== null && daysUntilExpiry <= 7 && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9998,
-          background: daysUntilExpiry <= 2 ? 'linear-gradient(135deg,#dc2626,#b91c1c)' : 'linear-gradient(135deg,#d97706,#b45309)',
-          color: '#fff', padding: '10px 24px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans','Segoe UI',sans-serif",
-          boxShadow: '0 2px 12px rgba(0,0,0,0.3)'
-        }}>
-          <span>
-            {daysUntilExpiry <= 0
-              ? '⚠️ Tu suscripción vence hoy'
-              : `⏰ Tu suscripción vence en ${daysUntilExpiry} día${daysUntilExpiry === 1 ? '' : 's'}`}
-          </span>
-          <a
-            href={`https://wa.me/${WHATSAPP_NUMBER}?text=${waExpiry}`}
-            target="_blank" rel="noreferrer"
-            style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', padding: '5px 14px', borderRadius: 8, textDecoration: 'none', fontWeight: 700, fontSize: 12 }}
-          >
-            💬 Renovar ahora
-          </a>
-        </div>
-      )}
-      <div style={{ paddingTop: daysUntilExpiry !== null && daysUntilExpiry <= 7 ? 44 : 0 }}>
-        <Router>
-          <DatabaseProvider>
-            <Routes>
-              <Route path="/*" element={<Layout onAdminPanel={undefined}><AppRoutes /></Layout>} />
-            </Routes>
-          </DatabaseProvider>
-        </Router>
-      </div>
+      <Router>
+        <DatabaseProvider>
+          <Routes>
+            <Route path="/*" element={<Layout onAdminPanel={undefined}><AppRoutes /></Layout>} />
+          </Routes>
+        </DatabaseProvider>
+      </Router>
     </>
   );
 };

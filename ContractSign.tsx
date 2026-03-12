@@ -8,7 +8,7 @@ const LICENCIANTE = {
   ciudad_cedula: 'Cali',
   domicilio: 'Cúcuta',
   firma_url: 'https://wdaabpbpxbbfhurvjvwj.supabase.co/storage/v1/object/public/company-logos/firma_diego.png',
-  email: import.meta.env.VITE_CONTACT_EMAIL || 'diegoferrangel@gmail.com',
+  email: import.meta.env.VITE_CONTACT_EMAIL || 'info@posmaster.org',
   whatsapp: import.meta.env.VITE_WHATSAPP_NUMBER || '573204884943',
 };
 

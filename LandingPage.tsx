@@ -3,7 +3,7 @@ import { supabase } from './supabaseClient';
 import { toast } from 'react-hot-toast';
 
 const WHATSAPP_NUMBER = '573204884943';
-const CONTACT_EMAIL = 'diegoferrangel@gmail.com';
+const CONTACT_EMAIL = 'info@posmaster.org';
 const BOLD_PAYMENT_URL = 'https://checkout.bold.co/payment/LNK_U58X7N71NX';
 const BOLD_PAYMENT_PRO_URL = 'https://checkout.bold.co/payment/LNK_F385LJNMKI';
 const EDGE_URL = `${(supabase as any).supabaseUrl}/functions/v1/master-admin-actions`;
