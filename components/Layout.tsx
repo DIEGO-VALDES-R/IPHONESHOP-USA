@@ -5,7 +5,7 @@ import {
   Settings, LogOut, Menu, Building2, User,
   Landmark, FileText, Globe, Receipt, ShieldCheck, Users, Utensils, ChefHat,
   Scissors, Stethoscope, FlaskConical, PawPrint, Pill, UserRound,
-  ChevronDown, ChevronRight, ExternalLink, Users2,
+  ChevronDown, ChevronRight, ExternalLink, Users2, Truck,
 } from 'lucide-react';
 import { useCurrency, CurrencyCode } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
@@ -35,6 +35,7 @@ const MODULE_PATHS: Record<string, string> = {
   inventory:   '/inventory',
   invoices:    '/invoices',
   quotes:      '/quotes',
+  purchases:   '/purchases',
   customers:   '/customers',
   repairs:     '/repairs',
   tables:      '/tables',
@@ -76,6 +77,7 @@ function getNavItems(
     { label: invLabel,             path: MODULE_PATHS.inventory,   icon: Package,         show: p('can_manage_inventory') },
     { label: 'Historial Facturas', path: MODULE_PATHS.invoices,    icon: Receipt,         show: p('can_view_reports') },
     { label: 'Cotizaciones',       path: MODULE_PATHS.quotes,     icon: FileText,        show: p('can_sell') },
+    { label: 'Órdenes de Compra',  path: MODULE_PATHS.purchases,  icon: Truck,           show: p('can_manage_inventory') },
     { label: 'Clientes',           path: MODULE_PATHS.customers,   icon: UserRound,       show: p('can_view_reports') },
   ];
 
