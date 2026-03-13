@@ -1066,6 +1066,11 @@ const MasterAdmin: React.FC = () => {
     const endDate = isTrial && !editCompany.subscription_end_date
       ? new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
       : editCompany.subscription_end_date || null;
+    // Si no hay feature_flags explícitos, generar los defaults del plan seleccionado
+    const featureFlags = editCompany.feature_flags && Object.keys(editCompany.feature_flags).length > 0
+      ? editCompany.feature_flags
+      : getDefaultFlags(editCompany.subscription_plan || 'BASIC');
+
     const { error } = await supabase.from('companies').update({
       name: editCompany.name, nit: editCompany.nit, email: editCompany.email,
       phone: editCompany.phone, address: editCompany.address,
@@ -1073,6 +1078,7 @@ const MasterAdmin: React.FC = () => {
       subscription_status:     editCompany.subscription_status,
       subscription_start_date: editCompany.subscription_start_date || null,
       subscription_end_date:   endDate,
+      feature_flags:           featureFlags,
     }).eq('id', editCompany.id);
     setSaving(false);
     if (error) { toast.error('Error: ' + error.message); return; }
@@ -1129,6 +1135,37 @@ const MasterAdmin: React.FC = () => {
 
   const inputCls = "w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white";
   const labelCls = "block text-sm font-semibold text-slate-600 mb-1";
+
+
+  const FEATURE_DEFS = [
+    // Ventas
+    { id: 'credit_notes',   label: 'Devoluciones / Notas Crédito', cat: 'Ventas',     defaultPlans: ['BASIC','PRO','ENTERPRISE'] },
+    { id: 'quotes',         label: 'Cotizaciones',                  cat: 'Ventas',     defaultPlans: ['BASIC','PRO','ENTERPRISE','TRIAL'] },
+    { id: 'dian',           label: 'Facturación electrónica DIAN',  cat: 'Ventas',     defaultPlans: ['ENTERPRISE'] },
+    // Inventario
+    { id: 'variants',       label: 'Variantes de producto',         cat: 'Inventario', defaultPlans: ['BASIC','PRO','ENTERPRISE'] },
+    { id: 'purchase_orders',label: 'Órdenes de compra',             cat: 'Inventario', defaultPlans: ['BASIC','PRO','ENTERPRISE'] },
+    { id: 'weighable',      label: 'Productos pesables (PLU)',       cat: 'Inventario', defaultPlans: ['BASIC','PRO','ENTERPRISE'] },
+    // Finanzas
+    { id: 'nomina',         label: 'Nómina y dotación',             cat: 'Finanzas',   defaultPlans: ['PRO','ENTERPRISE'] },
+    { id: 'cash_expenses',  label: 'Egresos de caja',               cat: 'Finanzas',   defaultPlans: ['BASIC','PRO','ENTERPRISE','TRIAL'] },
+    // Módulos
+    { id: 'restaurant',     label: 'Módulo Restaurante',            cat: 'Módulos',    defaultPlans: ['PRO','ENTERPRISE'] },
+    { id: 'salon',          label: 'Módulo Salón de belleza',        cat: 'Módulos',    defaultPlans: ['PRO','ENTERPRISE'] },
+    { id: 'dental',         label: 'Módulo Odontología',            cat: 'Módulos',    defaultPlans: ['PRO','ENTERPRISE'] },
+    { id: 'vet',            label: 'Módulo Veterinaria',            cat: 'Módulos',    defaultPlans: ['PRO','ENTERPRISE'] },
+    { id: 'pharmacy',       label: 'Módulo Farmacia',               cat: 'Módulos',    defaultPlans: ['PRO','ENTERPRISE'] },
+    { id: 'shoe_repair',    label: 'Módulo Zapatería',              cat: 'Módulos',    defaultPlans: ['PRO','ENTERPRISE'] },
+    // Marketing
+    { id: 'catalog',        label: 'Catálogo digital WhatsApp',     cat: 'Marketing',  defaultPlans: ['BASIC','PRO','ENTERPRISE'] },
+    { id: 'branding',       label: 'Personalización de marca',      cat: 'Marketing',  defaultPlans: ['PRO','ENTERPRISE'] },
+  ];
+
+  const getDefaultFlags = (plan: string): Record<string,boolean> => {
+    const flags: Record<string,boolean> = {};
+    FEATURE_DEFS.forEach(f => { flags[f.id] = f.defaultPlans.includes(plan); });
+    return flags;
+  };
 
   const PlanForm = ({ data, setData }: { data: any; setData: (v: any) => void }) => (
     <div className="space-y-4">
@@ -1204,6 +1241,59 @@ const MasterAdmin: React.FC = () => {
           <label className={labelCls}>Vencimiento</label>
           <input type="date" value={data.subscription_end_date || ''} onChange={e => setData({ ...data, subscription_end_date: e.target.value })} className={inputCls} />
         </div>
+      </div>
+
+      {/* ── Feature Flags ─────────────────────────────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className={labelCls + " mb-0"}>Features habilitados</label>
+          <button type="button"
+            onClick={() => {
+              const defaults = getDefaultFlags(data.subscription_plan || 'BASIC');
+              setData({ ...data, feature_flags: defaults });
+            }}
+            className="text-xs text-blue-600 hover:underline font-medium">
+            Restaurar por plan
+          </button>
+        </div>
+        <p className="text-[11px] text-slate-400 mb-3">
+          Sobreescribe los accesos del plan. Útil para demos, pruebas o clientes especiales.
+        </p>
+        {(() => {
+          const cats = [...new Set(FEATURE_DEFS.map(f => f.cat))];
+          const flags: Record<string,boolean> = data.feature_flags && Object.keys(data.feature_flags).length > 0
+            ? data.feature_flags
+            : getDefaultFlags(data.subscription_plan || 'BASIC');
+          const toggle = (id: string) => {
+            setData({ ...data, feature_flags: { ...flags, [id]: !flags[id] } });
+          };
+          return (
+            <div className="space-y-3">
+              {cats.map(cat => (
+                <div key={cat}>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">{cat}</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {FEATURE_DEFS.filter(f => f.cat === cat).map(feat => {
+                      const enabled = flags[feat.id] !== false && (flags[feat.id] === true || feat.defaultPlans.includes(data.subscription_plan || 'BASIC'));
+                      const isOn = flags[feat.id] !== undefined ? flags[feat.id] : feat.defaultPlans.includes(data.subscription_plan || 'BASIC');
+                      return (
+                        <button key={feat.id} type="button" onClick={() => toggle(feat.id)}
+                          className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border text-xs font-medium transition-all text-left ${
+                            isOn ? 'border-green-300 bg-green-50 text-green-700' : 'border-slate-200 bg-slate-50 text-slate-400'
+                          }`}>
+                          <div className={`w-3.5 h-3.5 rounded-sm flex items-center justify-center flex-shrink-0 ${isOn ? 'bg-green-500' : 'bg-slate-200'}`}>
+                            {isOn && <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+                          </div>
+                          {feat.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

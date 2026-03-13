@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Lock, Unlock, History, AlertTriangle, FileText, ChevronDown, ChevronUp, RefreshCw, Printer, Wifi, Monitor, Settings } from 'lucide-react';
+import { DollarSign, Lock, Unlock, History, AlertTriangle, FileText, ChevronDown, ChevronUp, RefreshCw, Printer, Wifi, Monitor, Settings, MinusCircle, Plus, Trash2, X } from 'lucide-react';
 import { toast, Toaster } from 'react-hot-toast';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useDatabase } from '../contexts/DatabaseContext';
@@ -172,6 +172,23 @@ interface TurnInvoice {
   payment_method?: any;
 }
 
+interface CashExpense {
+  id?: string;
+  concept: string;
+  amount: number;
+  category: string;
+  created_at?: string;
+}
+
+const EXPENSE_CATEGORIES = [
+  { id: 'general',    label: 'General' },
+  { id: 'servicios',  label: 'Servicios (agua, luz…)' },
+  { id: 'compras',    label: 'Compras menores' },
+  { id: 'transporte', label: 'Transporte / mensajería' },
+  { id: 'aseo',       label: 'Aseo / mantenimiento' },
+  { id: 'otro',       label: 'Otro' },
+];
+
 const CashControl: React.FC = () => {
   const { session, openSession, closeSession, sessionsHistory, companyId, branchId, refreshAll } = useDatabase();
   const [openAmount, setOpenAmount] = useState('');
@@ -188,6 +205,14 @@ const CashControl: React.FC = () => {
   );
   const [showDrawerConfig, setShowDrawerConfig] = useState(false);
   const [openingDrawer, setOpeningDrawer] = useState(false);
+
+  // Egresos de caja
+  const [expenses, setExpenses] = useState<CashExpense[]>([]);
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [expenseConcept, setExpenseConcept] = useState('');
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseCategory, setExpenseCategory] = useState('general');
+  const [savingExpense, setSavingExpense] = useState(false);
 
   const { formatMoney } = useCurrency();
 
@@ -221,6 +246,52 @@ const CashControl: React.FC = () => {
 
     loadTurnInvoices();
   }, [session, companyId, branchId]);
+
+  // Cargar egresos del turno actual
+  useEffect(() => {
+    const loadExpenses = async () => {
+      if (!session?.id || session.status !== 'OPEN') { setExpenses([]); return; }
+      const { data } = await supabase.from('cash_expenses')
+        .select('*').eq('session_id', session.id).order('created_at', { ascending: false });
+      setExpenses(data || []);
+    };
+    loadExpenses();
+  }, [session]);
+
+  const handleSaveExpense = async () => {
+    if (!expenseConcept.trim() || !expenseAmount || parseFloat(expenseAmount) <= 0) {
+      toast.error('Completa el concepto y el monto'); return;
+    }
+    if (!session?.id || !companyId) return;
+    setSavingExpense(true);
+    try {
+      const { data, error } = await supabase.from('cash_expenses').insert({
+        company_id: companyId,
+        branch_id: branchId || null,
+        session_id: session.id,
+        concept: expenseConcept.trim(),
+        amount: parseFloat(expenseAmount),
+        category: expenseCategory,
+      }).select().single();
+      if (error) throw error;
+      setExpenses(prev => [data, ...prev]);
+      setExpenseConcept('');
+      setExpenseAmount('');
+      setExpenseCategory('general');
+      setShowExpenseModal(false);
+      toast.success('Egreso registrado');
+    } catch (e: any) { toast.error(e.message); }
+    finally { setSavingExpense(false); }
+  };
+
+  const handleDeleteExpense = async (id: string) => {
+    if (!confirm('¿Eliminar este egreso?')) return;
+    await supabase.from('cash_expenses').delete().eq('id', id);
+    setExpenses(prev => prev.filter(e => e.id !== id));
+    toast.success('Egreso eliminado');
+  };
+
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
 
   const handleOpenRegister = (e: React.FormEvent) => {
     e.preventDefault();
@@ -332,10 +403,55 @@ const CashControl: React.FC = () => {
                   <span className="text-slate-600">Facturas en este turno</span>
                   <span className="font-bold text-blue-600">{turnInvoices.length} facturas</span>
                 </div>
+                {totalExpenses > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-red-600">Egresos registrados</span>
+                    <span className="font-bold text-red-600">- {formatMoney(totalExpenses)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-lg font-bold pt-2 text-blue-600">
                   <span>Total Esperado en Caja</span>
-                  <span>{formatMoney(session.start_cash + session.total_sales_cash)}</span>
+                  <span>{formatMoney(session.start_cash + session.total_sales_cash - totalExpenses)}</span>
                 </div>
+              </div>
+
+              {/* ── Egresos de caja ──────────────────────────────────────── */}
+              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <MinusCircle size={15} className="text-red-500" />
+                    <span className="text-sm font-semibold text-slate-700">Egresos de caja</span>
+                    {expenses.length > 0 && (
+                      <span className="text-xs bg-red-100 text-red-600 font-bold px-2 py-0.5 rounded-full">
+                        {formatMoney(totalExpenses)}
+                      </span>
+                    )}
+                  </div>
+                  <button type="button" onClick={() => setShowExpenseModal(true)}
+                    className="flex items-center gap-1 text-xs px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold">
+                    <Plus size={12} /> Registrar egreso
+                  </button>
+                </div>
+                {expenses.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-4">Sin egresos en este turno</p>
+                ) : (
+                  <div className="divide-y divide-slate-100 max-h-40 overflow-y-auto">
+                    {expenses.map(exp => (
+                      <div key={exp.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                        <div>
+                          <p className="font-medium text-slate-700">{exp.concept}</p>
+                          <p className="text-xs text-slate-400 capitalize">{exp.category} · {new Date(exp.created_at!).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-red-600">{formatMoney(exp.amount)}</span>
+                          <button type="button" onClick={() => handleDeleteExpense(exp.id!)} className="text-slate-300 hover:text-red-400">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <form onSubmit={handleCloseRegister} className="space-y-4 pt-2">
@@ -500,6 +616,66 @@ const CashControl: React.FC = () => {
           onChange={saveDrawerConfig}
           onClose={() => setShowDrawerConfig(false)}
         />
+      )}
+
+      {/* ── Modal Egreso de Caja ─────────────────────────────────────── */}
+      {showExpenseModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <MinusCircle size={18} className="text-red-500" />
+                <h3 className="font-bold text-slate-800">Registrar egreso</h3>
+              </div>
+              <button onClick={() => setShowExpenseModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Concepto *</label>
+                <input
+                  autoFocus
+                  value={expenseConcept}
+                  onChange={e => setExpenseConcept(e.target.value)}
+                  placeholder="Ej: Papel para impresora, domicilio..."
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Categoría</label>
+                <select value={expenseCategory} onChange={e => setExpenseCategory(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-400">
+                  {EXPENSE_CATEGORIES.map(c => (
+                    <option key={c.id} value={c.id}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Monto *</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={expenseAmount}
+                  onChange={e => setExpenseAmount(e.target.value)}
+                  placeholder="0"
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-400"
+                  onKeyDown={e => e.key === 'Enter' && handleSaveExpense()}
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 px-5 pb-5">
+              <button onClick={() => setShowExpenseModal(false)}
+                className="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium">
+                Cancelar
+              </button>
+              <button onClick={handleSaveExpense} disabled={savingExpense}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-bold disabled:opacity-50">
+                {savingExpense ? 'Guardando...' : 'Registrar egreso'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

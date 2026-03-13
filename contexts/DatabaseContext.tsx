@@ -6,6 +6,7 @@ import { toast } from 'react-hot-toast';
 interface DatabaseContextType {
   company: Company | null;
   companyId: string | null;
+  hasFeature: (featureId: string) => boolean;
   branchId: string | null;
   products: Product[];
   repairs: RepairOrder[];
@@ -46,6 +47,34 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [branchId, setBranchId] = useState<string | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
+
+  // Feature flags — checks company.feature_flags, falls back to plan defaults
+  const hasFeature = (featureId: string): boolean => {
+    if (!company) return false;
+    const flags = (company as any).feature_flags;
+    if (flags && typeof flags === 'object' && featureId in flags) return !!flags[featureId];
+    // Fallback: plan-based defaults
+    const plan = company.subscription_plan || 'BASIC';
+    const planFeatures: Record<string, string[]> = {
+      credit_notes:    ['BASIC','PRO','ENTERPRISE'],
+      quotes:          ['BASIC','PRO','ENTERPRISE','TRIAL'],
+      dian:            ['ENTERPRISE'],
+      variants:        ['BASIC','PRO','ENTERPRISE'],
+      purchase_orders: ['BASIC','PRO','ENTERPRISE'],
+      weighable:       ['BASIC','PRO','ENTERPRISE'],
+      nomina:          ['PRO','ENTERPRISE'],
+      cash_expenses:   ['BASIC','PRO','ENTERPRISE','TRIAL'],
+      restaurant:      ['PRO','ENTERPRISE'],
+      salon:           ['PRO','ENTERPRISE'],
+      dental:          ['PRO','ENTERPRISE'],
+      vet:             ['PRO','ENTERPRISE'],
+      pharmacy:        ['PRO','ENTERPRISE'],
+      shoe_repair:     ['PRO','ENTERPRISE'],
+      catalog:         ['BASIC','PRO','ENTERPRISE'],
+      branding:        ['PRO','ENTERPRISE'],
+    };
+    return (planFeatures[featureId] || []).includes(plan);
+  };
   const [products, setProducts] = useState<Product[]>([]);
   const [repairs, setRepairs] = useState<RepairOrder[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -529,7 +558,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode; overrideCom
       session, sessionsHistory, isLoading, userRole, customRole, permissions,
       availableCompanies, addProduct, updateProduct, deleteProduct, addRepair,
       updateRepairStatus, processSale, updateCompanyConfig, saveDianSettings,
-      openSession, closeSession, refreshProducts, refreshCompany, refreshAll, switchCompany, hasPermission,
+      openSession, closeSession, refreshProducts, refreshCompany, refreshAll, switchCompany, hasPermission, hasFeature,
     }}>
       {children}
     </DatabaseContext.Provider>

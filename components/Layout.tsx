@@ -57,6 +57,7 @@ function getNavItems(
   hasPermission: (k: string) => boolean,
   isAdmin: boolean,
   isPro: boolean,
+  hasFeature: (f: string) => boolean,
 ) {
   const p = (key: string) => hasPermission(key) || isAdmin;
   const type = businessType || 'general';
@@ -77,27 +78,27 @@ function getNavItems(
     { label: 'Control de Caja',    path: MODULE_PATHS.cash,        icon: Landmark,        show: p('can_open_cash') },
     { label: invLabel,             path: MODULE_PATHS.inventory,   icon: Package,         show: p('can_manage_inventory') },
     { label: 'Historial Facturas', path: MODULE_PATHS.invoices,    icon: Receipt,         show: p('can_view_reports') },
-    { label: 'Cotizaciones',       path: MODULE_PATHS.quotes,     icon: FileText,        show: p('can_sell') },
-    { label: 'Órdenes de Compra',  path: MODULE_PATHS.purchases,  icon: Truck,           show: p('can_manage_inventory') },
-    { label: 'Devoluciones / NC',    path: MODULE_PATHS.creditNotes,icon: RotateCcw,       show: p('can_refund') },
+    { label: 'Cotizaciones',       path: MODULE_PATHS.quotes,      icon: FileText,        show: p('can_sell') && hasFeature('quotes') },
+    { label: 'Órdenes de Compra',  path: MODULE_PATHS.purchases,   icon: Truck,           show: p('can_manage_inventory') && hasFeature('purchase_orders') },
+    { label: 'Devoluciones / NC',  path: MODULE_PATHS.creditNotes, icon: RotateCcw,       show: p('can_refund') && hasFeature('credit_notes') },
     { label: 'Clientes',           path: MODULE_PATHS.customers,   icon: UserRound,       show: p('can_view_reports') },
   ];
 
   if (type === 'restaurante') {
     items.push(
-      { label: 'Mesas',          path: MODULE_PATHS.tables,  icon: Utensils, show: p('can_sell') },
-      { label: 'Display Cocina', path: MODULE_PATHS.kitchen, icon: ChefHat,  show: isAdmin },
+      { label: 'Mesas',          path: MODULE_PATHS.tables,  icon: Utensils, show: p('can_sell') && hasFeature('restaurant') },
+      { label: 'Display Cocina', path: MODULE_PATHS.kitchen, icon: ChefHat,  show: isAdmin && hasFeature('restaurant') },
     );
   } else if (type === 'salon') {
-    items.push({ label: 'Salón de Belleza', path: MODULE_PATHS.salon,       icon: Scissors,    show: p('can_sell') });
+    items.push({ label: 'Salón de Belleza', path: MODULE_PATHS.salon,       icon: Scissors,    show: p('can_sell') && hasFeature('salon') });
   } else if (type === 'odontologia') {
-    items.push({ label: 'Odontología',      path: MODULE_PATHS.dentistry,   icon: Stethoscope, show: p('can_sell') });
+    items.push({ label: 'Odontología',      path: MODULE_PATHS.dentistry,   icon: Stethoscope, show: p('can_sell') && hasFeature('dental') });
   } else if (type === 'veterinaria') {
-    items.push({ label: 'Veterinaria',      path: MODULE_PATHS.veterinaria, icon: PawPrint,    show: p('can_sell') });
+    items.push({ label: 'Veterinaria',      path: MODULE_PATHS.veterinaria, icon: PawPrint,    show: p('can_sell') && hasFeature('vet') });
   } else if (type === 'farmacia') {
-    items.push({ label: 'Farmacia',         path: MODULE_PATHS.farmacia,    icon: Pill,        show: p('can_sell') });
+    items.push({ label: 'Farmacia',         path: MODULE_PATHS.farmacia,    icon: Pill,        show: p('can_sell') && hasFeature('pharmacy') });
   } else if (type === 'zapateria') {
-    items.push({ label: 'Zapatería / Rep.', path: MODULE_PATHS.shoe,        icon: Wrench,      show: p('can_view_repairs') });
+    items.push({ label: 'Zapatería / Rep.', path: MODULE_PATHS.shoe,        icon: Wrench,      show: p('can_view_repairs') && hasFeature('shoe_repair') });
   } else {
     items.push({ label: 'Servicio Técnico', path: MODULE_PATHS.repairs,     icon: Wrench,      show: p('can_view_repairs') });
   }
@@ -106,7 +107,7 @@ function getNavItems(
     { label: 'Cartera / CxC', path: MODULE_PATHS.receivables, icon: FileText,     show: p('can_view_reports') },
     { label: 'Insumos',       path: MODULE_PATHS.supplies,    icon: FlaskConical, show: isAdmin },
     { label: 'Equipo',        path: MODULE_PATHS.team,        icon: Users,        show: isPro && p('can_manage_team') },
-    { label: 'Nómina',        path: MODULE_PATHS.nomina,      icon: Users2,       show: isAdmin },
+    { label: 'Nómina',        path: MODULE_PATHS.nomina,      icon: Users2,       show: isAdmin && hasFeature('nomina') },
   );
 
   return items.filter(i => i.show);
@@ -278,7 +279,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
   const navigate  = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { currency, setCurrency } = useCurrency();
-  const { company, companyId, isLoading, userRole, hasPermission, switchCompany } = useDatabase();
+  const { company, companyId, isLoading, userRole, hasPermission, hasFeature, switchCompany } = useDatabase();
   const [childBranches, setChildBranches] = useState<any[]>([]);
   const [switching, setSwitching] = useState(false);
 
@@ -410,7 +411,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
                 companyId={rootCid}
                 name={companyName}
                 businessType={bt}
-                items={getNavItems(bt, hasPermission, isAdmin, isPro)}
+                items={getNavItems(bt, hasPermission, isAdmin, isPro, hasFeature)}
                 activeSectionId={activeSectionId}
                 setActiveSectionId={setActiveSectionIdState}
                 fontColor={fontColor}
@@ -435,7 +436,7 @@ const Layout: React.FC<LayoutProps> = ({ children, onAdminPanel }) => {
                 branchLinkId={b.id}
                 name={b.name}
                 businessType={bt}
-                items={getNavItems(bt, hasPermission, isAdmin, isPro)}
+                items={getNavItems(bt, hasPermission, isAdmin, isPro, hasFeature)}
                 activeSectionId={activeSectionId}
                 setActiveSectionId={setActiveSectionIdState}
                 fontColor={fontColor}
