@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Edit2, Trash2, X, Package, Upload, Image as ImageIcon, ChevronDown, List, Grid3x3, ArrowLeft, Zap, FileSpreadsheet, Download, CheckCircle, AlertCircle, Truck, Phone, Mail, AlertTriangle, ShoppingCart, Scale, TrendingUp, Calculator, BarChart3, RefreshCw, ChevronRight } from 'lucide-react';
+import { VariantManager } from '../components/VariantManager';
+import { Plus, Search, Edit2, Trash2, X, Package, Upload, Image as ImageIcon, ChevronDown, List, Grid3x3, ArrowLeft, Zap, FileSpreadsheet, Download, CheckCircle, AlertCircle, Truck, Phone, Mail, AlertTriangle, ShoppingCart, Scale, TrendingUp, Calculator, BarChart3, RefreshCw, ChevronRight, Tag } from 'lucide-react';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { productService, Product } from '../services/productService';
 import { useCompany } from '../hooks/useCompany';
@@ -11,7 +12,7 @@ import * as XLSX from 'xlsx';
 const EMPTY_PRODUCT = {
   company_id: '', name: '', sku: '', category: '', brand: '',
   description: '', price: 0, cost: 0, tax_rate: 19,
-  stock_min: 5, stock_quantity: 0, type: 'STANDARD' as const, is_active: true,
+  stock_min: 5, stock_quantity: 0, type: 'STANDARD' as const, is_active: true, has_variants: false,
   image_url: '', supplier_id: '', business_context: 'general',
 };
 
@@ -121,17 +122,22 @@ const ImportModal: React.FC<{ companyId: string; branchId: string | null; suppli
   const supplierCache: Record<string, string> = {};
 
   const resolveSupplier = async (name: string): Promise<string | null> => {
-    if (!name) return null;
-    const key = name.toLowerCase();
+    if (!name?.trim()) return null;
+    const cleanName = name.trim();
+    const key = cleanName.toLowerCase();
     if (supplierCache[key]) return supplierCache[key];
-    // Buscar existente
-    const existing = suppliers.find(s => s.name.toLowerCase() === key);
+    // Buscar existente (comparación sin importar mayúsculas ni espacios)
+    const existing = suppliers.find(s => s.name.trim().toLowerCase() === key);
     if (existing) { supplierCache[key] = existing.id; return existing.id; }
-    // Crear nuevo
+    // También buscar en BD por si acaso (el array suppliers puede estar desactualizado)
+    const { data: found } = await supabase.from('suppliers')
+      .select('id').eq('company_id', companyId).ilike('name', cleanName).maybeSingle();
+    if (found) { supplierCache[key] = found.id; return found.id; }
+    // Crear nuevo proveedor automáticamente
     const { data, error } = await supabase.from('suppliers')
-      .insert({ company_id: companyId, name, products_supplied: '' })
+      .insert({ company_id: companyId, name: cleanName, products_supplied: '' })
       .select('id').single();
-    if (error || !data) return null;
+    if (error || !data) { console.warn('Error creando proveedor:', cleanName, error); return null; }
     supplierCache[key] = data.id;
     return data.id;
   };
@@ -176,6 +182,7 @@ const ImportModal: React.FC<{ companyId: string; branchId: string | null; suppli
             tax_rate: row.tax_rate ?? 19,
             type: row.type === 'SERVICE' ? 'SERVICE' : 'STANDARD',
             is_active: true,
+            ...(supplier_id ? { supplier_id } : {}),
           });
           error = e;
         }
@@ -215,12 +222,34 @@ const ImportModal: React.FC<{ companyId: string; branchId: string | null; suppli
             </div>
             <button onClick={() => {
               const wb = XLSX.utils.book_new();
+
+              // ── Hoja principal ───────────────────────────────────────────
               const headers = ['Nombre *','SKU *','Código de Barras','Categoría','Marca','Descripción','Precio Venta *','Costo *','Stock Inicial','Stock Mínimo','IVA (%)','Tipo','Proveedor'];
-              const example = ['Pantalla Samsung A11','SKU-001','7890123456789','PANTALLAS','SAMSUNG','Pantalla original','45000','30000','4','1','0','STANDARD','Mi Proveedor S.A.'];
-              const ws = XLSX.utils.aoa_to_sheet([headers, example]);
-              ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 4, 15) }));
-              XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
-              XLSX.writeFile(wb, 'plantilla_inventario.xlsx');
+              const examples = [
+                ['Camiseta Azul M','CAM-AZ-M','','CAMISETAS','BRAND','Camiseta algodón talla M','35000','18000','10','2','19','STANDARD','Distribuidora XYZ'],
+                ['Pantalla Samsung A11','SKU-001','7890123456789','PANTALLAS','SAMSUNG','Pantalla original','45000','30000','4','1','19','STANDARD','Samsung Colombia'],
+                ['Servicio Técnico','SERV-01','','SERVICIOS','','Diagnóstico y reparación','50000','0','0','0','0','SERVICE',''],
+              ];
+              const notes = [['💡 INSTRUCCIONES:'],['• Campos con * son obligatorios'],['• Tipo: STANDARD (normal) o SERVICE (servicio sin stock)'],['• Proveedor: escribe el nombre exactamente — se crea automáticamente si no existe'],['• IVA: escribe solo el número (19, 5, 0)'],['• Stock Inicial: cantidad en bodega al importar']];
+              const wsData = [headers, ...examples, [], ...notes];
+              const ws = XLSX.utils.aoa_to_sheet(wsData);
+              ws['!cols'] = headers.map((h, i) => ({ wch: [28,14,18,16,14,28,14,10,13,13,8,10,22][i] || 16 }));
+
+              // Estilo encabezado (color azul — requiere sheetjs-style, dejamos comentario)
+              XLSX.utils.book_append_sheet(wb, ws, 'Productos');
+
+              // ── Hoja de proveedores actuales ─────────────────────────────
+              const supHeaders = ['Nombre del Proveedor','NIT','Teléfono','Email'];
+              const supExamples = [
+                ['Distribuidora XYZ','900123456-1','3001234567','ventas@xyz.com'],
+                ['Samsung Colombia','800654321-0','6017654321',''],
+              ];
+              const supNotes = [[''],['💡 Esta hoja es de referencia — los proveedores de la columna "Proveedor" en la hoja Productos se crean automáticamente.']];
+              const wsProveedores = XLSX.utils.aoa_to_sheet([supHeaders, ...supExamples, ...supNotes]);
+              wsProveedores['!cols'] = [{ wch: 28 }, { wch: 16 }, { wch: 14 }, { wch: 26 }];
+              XLSX.utils.book_append_sheet(wb, wsProveedores, 'Proveedores (referencia)');
+
+              XLSX.writeFile(wb, 'plantilla_inventario_POSmaster.xlsx');
             }}
               className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors">
               <Download size={15} /> Plantilla Excel
@@ -1055,6 +1084,7 @@ const Inventory: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
+  const [variantProduct, setVariantProduct] = useState<Product | null>(null);
   const [form, setForm] = useState(EMPTY_PRODUCT);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -1144,9 +1174,20 @@ const Inventory: React.FC = () => {
     setSaving(true);
     try {
       const productData = { ...form, supplier_id: (form as any).supplier_id || null, branch_id: branchId || null };
-      if (editing?.id) { await productService.update(editing.id, productData); toast.success('Producto actualizado'); }
-      else { await productService.create({ ...productData, company_id: companyId! }); toast.success('Producto creado'); }
-      setShowModal(false); load();
+      if (editing?.id) {
+        await productService.update(editing.id, productData);
+        toast.success('Producto actualizado');
+        setShowModal(false); load();
+      } else {
+        const created = await productService.create({ ...productData, company_id: companyId! });
+        toast.success('Producto creado');
+        setShowModal(false);
+        await load();
+        // If has_variants, open variant manager immediately
+        if ((form as any).has_variants && created?.id) {
+          setVariantProduct({ ...productData, id: created.id, company_id: companyId! } as any);
+        }
+      }
     } catch (e: any) { toast.error(e.message); }
     finally { setSaving(false); }
   };
@@ -1243,8 +1284,15 @@ const Inventory: React.FC = () => {
           )}
         </td>
         <td className="px-4 py-3 font-medium text-slate-900">
-          {p.name}
-          {isInactive && <span className="ml-2 px-1.5 py-0.5 text-[10px] bg-slate-200 text-slate-500 rounded font-bold">INACTIVO</span>}
+          <div className="flex items-center gap-2">
+            {p.name}
+            {(p as any).has_variants && (
+              <span className="px-1.5 py-0.5 text-[10px] bg-indigo-100 text-indigo-600 rounded font-bold flex items-center gap-0.5">
+                <Tag size={9} /> VAR
+              </span>
+            )}
+            {isInactive && <span className="px-1.5 py-0.5 text-[10px] bg-slate-200 text-slate-500 rounded font-bold">INACTIVO</span>}
+          </div>
         </td>
         <td className="px-4 py-3 text-slate-500 font-mono text-xs">{p.sku}</td>
         <td className="px-4 py-3 text-slate-500">{p.category || '—'}</td>
@@ -1264,6 +1312,7 @@ const Inventory: React.FC = () => {
         <td className="px-4 py-3">
           <div className="flex gap-2">
             <button onClick={() => openEdit(p)} className="text-blue-600 hover:text-blue-800"><Edit2 size={15} /></button>
+            <button onClick={() => setVariantProduct(p)} title="Variantes" className="text-indigo-500 hover:text-indigo-700"><Tag size={15} /></button>
             {isInactive ? (
               <button onClick={async () => { await productService.reactivate(p.id!); toast.success('Producto reactivado'); load(); }}
                 className="text-green-600 hover:text-green-800 text-xs font-bold px-2 py-0.5 border border-green-300 rounded">Activar</button>
@@ -1303,6 +1352,7 @@ const Inventory: React.FC = () => {
         </div>
         <div className="flex gap-2 pt-2 border-t border-slate-100">
           <button onClick={() => openEdit(p)} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 rounded transition-colors"><Edit2 size={14} /> Editar</button>
+          <button onClick={() => setVariantProduct(p)} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded transition-colors"><Tag size={14} /> Variantes</button>
           <button onClick={() => handleDelete(p.id!)} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm bg-red-50 text-red-600 hover:bg-red-100 rounded transition-colors"><Trash2 size={14} /> Eliminar</button>
         </div>
       </div>
@@ -1535,6 +1585,14 @@ const Inventory: React.FC = () => {
       {activeTab === 'suppliers' && companyId && <SuppliersTab companyId={companyId} />}
 
       {/* MODAL STOCK BAJO */}
+      {variantProduct && (
+        <VariantManager
+          product={variantProduct}
+          formatMoney={formatMoney}
+          onClose={() => setVariantProduct(null)}
+          onSaved={() => { setVariantProduct(null); load(); }}
+        />
+      )}
       {showLowStock && (
         <LowStockModal products={products} suppliers={suppliers} onClose={() => setShowLowStock(false)} onGoInventory={() => setActiveTab('products')} />
       )}
@@ -1596,6 +1654,26 @@ const Inventory: React.FC = () => {
                     <option value="SERVICE">Servicio</option>
                   </select>
                 </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Variantes</label>
+                  <button type="button"
+                    onClick={() => setForm((prev: any) => ({ ...prev, has_variants: !prev.has_variants }))}
+                    className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border-2 transition-all text-left ${(form as any).has_variants ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}`}>
+                    <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 ${(form as any).has_variants ? 'bg-indigo-600' : 'bg-white border-2 border-slate-300'}`}>
+                      {(form as any).has_variants && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
+                    </div>
+                    <div>
+                      <p className={`text-sm font-semibold ${(form as any).has_variants ? 'text-indigo-700' : 'text-slate-600'}`}>
+                        Este producto tiene variantes (talla, color, capacidad…)
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {(form as any).has_variants
+                          ? 'Al guardar, podrás definir las variantes con su propio SKU y stock'
+                          : 'Activa si el mismo producto viene en diferentes presentaciones'}
+                      </p>
+                    </div>
+                  </button>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Precio Venta</label>
                   <input type="number" min="0" value={numVal(form.price)} onChange={handleNumChange('price')} placeholder="0" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
@@ -1642,8 +1720,9 @@ const Inventory: React.FC = () => {
             </div>
             <div className="flex gap-3 p-6 pt-0">
               <button onClick={() => setShowModal(false)} className="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 font-medium">Cancelar</button>
-              <button onClick={handleSave} disabled={saving || uploading} className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50">
-                {saving ? 'Guardando...' : editing ? 'Actualizar' : 'Crear Producto'}
+              <button onClick={handleSave} disabled={saving || uploading}
+                className={`flex-1 px-4 py-2.5 rounded-lg font-medium disabled:opacity-50 transition-colors ${(form as any).has_variants && !editing ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>
+                {saving ? 'Guardando...' : editing ? 'Actualizar' : (form as any).has_variants ? '💾 Guardar y definir variantes →' : 'Crear Producto'}
               </button>
             </div>
           </div>
