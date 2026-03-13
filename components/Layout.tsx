@@ -34,6 +34,7 @@ const MODULE_PATHS: Record<string, string> = {
   cash:        '/cash-control',
   inventory:   '/inventory',
   invoices:    '/invoices',
+  quotes:      '/quotes',
   customers:   '/customers',
   repairs:     '/repairs',
   tables:      '/tables',
@@ -74,6 +75,7 @@ function getNavItems(
     { label: 'Control de Caja',    path: MODULE_PATHS.cash,        icon: Landmark,        show: p('can_open_cash') },
     { label: invLabel,             path: MODULE_PATHS.inventory,   icon: Package,         show: p('can_manage_inventory') },
     { label: 'Historial Facturas', path: MODULE_PATHS.invoices,    icon: Receipt,         show: p('can_view_reports') },
+    { label: 'Cotizaciones',       path: MODULE_PATHS.quotes,     icon: FileText,        show: p('can_sell') },
     { label: 'Clientes',           path: MODULE_PATHS.customers,   icon: UserRound,       show: p('can_view_reports') },
   ];
 
