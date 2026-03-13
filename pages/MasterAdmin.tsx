@@ -1469,25 +1469,27 @@ const MasterAdmin: React.FC = () => {
       {/* MODAL EDITAR EMPRESA */}
       {showEditModal && editCompany && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl flex flex-col" style={{ maxHeight: '92vh' }}>
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center flex-shrink-0">
               <div>
                 <h3 className="text-lg font-bold text-slate-800">Editar Empresa</h3>
                 <p className="text-xs text-slate-400">{editCompany.name}</p>
               </div>
               <button onClick={() => setShowEditModal(false)} className="p-1 hover:bg-slate-100 rounded-full"><X size={20} /></button>
             </div>
-            <form onSubmit={handleEdit} className="p-6 overflow-y-auto space-y-1">
-              <PlanForm data={editCompany} setData={setEditCompany} />
-              <div className="pt-4 flex gap-3">
-                <button type="button" onClick={() => setShowEditModal(false)}
-                  className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50">Cancelar</button>
-                <button type="submit" disabled={saving}
-                  className={`flex-1 px-4 py-2.5 text-white rounded-xl font-bold disabled:opacity-60 ${editCompany.subscription_plan === 'ENTERPRISE' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                  {saving ? 'Guardando...' : 'Guardar Cambios'}
-                </button>
-              </div>
-            </form>
+            <div className="overflow-y-auto flex-1" style={{ overflowY: 'scroll' }}>
+              <form onSubmit={handleEdit} className="p-6 space-y-4">
+                <PlanForm data={editCompany} setData={setEditCompany} />
+                <div className="pt-2 flex gap-3">
+                  <button type="button" onClick={() => setShowEditModal(false)}
+                    className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50">Cancelar</button>
+                  <button type="submit" disabled={saving}
+                    className={`flex-1 px-4 py-2.5 text-white rounded-xl font-bold disabled:opacity-60 ${editCompany.subscription_plan === 'ENTERPRISE' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                    {saving ? 'Guardando...' : 'Guardar Cambios'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
