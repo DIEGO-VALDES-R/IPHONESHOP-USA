@@ -26,6 +26,7 @@ import { LandingPage, RegisterPage, AdminPanel, ClientPortal } from './LandingPa
 import { ContractSign } from './ContractSign';
 import AcceptInvitation from './AcceptInvitation';
 import { Toaster } from 'react-hot-toast';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 
 // ── CORRECCIÓN AUTH-04 / FRO-01 ───────────────────────────────────────────────
 // Las constantes sensibles se mueven a variables de entorno .env
@@ -586,6 +587,7 @@ const App: React.FC = () => {
   return (
     <>
       <Toaster position="top-right" />
+      <PWAInstallPrompt />
       <Router>
         <DatabaseProvider>
           <Routes>
