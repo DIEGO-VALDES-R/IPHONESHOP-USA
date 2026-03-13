@@ -23,6 +23,7 @@ import Supplies from './pages/Supplies';
 import Farmacia from './pages/Farmacia';
 import Customers from './pages/Customers';
 import Quotes from './pages/Quotes';
+import Nomina from './pages/Nomina';
 import { LandingPage, RegisterPage, AdminPanel, ClientPortal } from './LandingPage';
 import { ContractSign } from './ContractSign';
 import AcceptInvitation from './AcceptInvitation';
@@ -456,6 +457,7 @@ const AppRoutes: React.FC = () => (
     <Route path="/farmacia"     element={<Farmacia />} />
     <Route path="/customers"    element={<Customers />} />
     <Route path="/quotes"       element={<Quotes />} />
+    <Route path="/nomina"       element={<Nomina />} />
   </Routes>
 );
 
