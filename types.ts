@@ -84,17 +84,25 @@ export interface CompanyConfig {
 
 export interface DianSettings {
   company_id: string;
-  software_id: string;
-  software_pin: string;
+  // ── Factus API ──────────────────────────────────────────────────
+  factus_token: string;          // Bearer token de la cuenta Factus del cliente
+  factus_env: 'sandbox' | 'production';  // Ambiente
+  // ── Resolución DIAN ─────────────────────────────────────────────
+  resolution_number: string;     // Número resolución DIAN
+  resolution_date: string;       // Fecha resolución (YYYY-MM-DD)
+  prefix: string;                // Prefijo (ej: SETP)
+  range_from: number;            // Desde
+  range_to: number;              // Hasta
+  current_number: number;        // Correlativo actual
+  // ── Empresa (para Factus) ────────────────────────────────────────
+  nit_digit: string;             // Dígito verificación NIT
+  // ── Legado (no se usan con Factus pero se mantienen) ────────────
+  software_id?: string;
+  software_pin?: string;
+  technical_key?: string;
   certificate_url?: string;
   certificate_password?: string;
-  resolution_number: string;
-  prefix: string;
-  current_number: number;
-  range_from: number;
-  range_to: number;
-  technical_key: string;
-  environment: DianEnvironment;
+  environment?: DianEnvironment;
   is_active: boolean;
 }
 

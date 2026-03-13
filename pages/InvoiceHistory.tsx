@@ -184,7 +184,18 @@ const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, compan
             <div className="mt-4 print:hidden">
               <BotonFacturaDian
                 invoiceId={invoice.id}
-                tipoVenta="electronica"
+                invoiceNumber={invoice.invoice_number}
+                currentStatus={invoice.status}
+                cufe={invoice.dian_cufe}
+                tipo={invoice.customers?.document_number ? 'FEV' : 'POS'}
+                onSuccess={(cufe, pdfUrl) => {
+                  // Actualizar estado local sin recargar
+                  setInvoices(prev => prev.map(inv =>
+                    inv.id === invoice.id
+                      ? { ...inv, status: 'ACCEPTED', dian_cufe: cufe }
+                      : inv
+                  ));
+                }}
               />
             </div>
           )}

@@ -163,17 +163,19 @@ const Settings: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   const [dianForm, setDianForm] = useState<DianSettings>(safeCompany.dian_settings || {
-    company_id: safeCompany.id, 
-    software_id: '', 
-    software_pin: '',
-    resolution_number: '', 
-    prefix: '', 
-    current_number: 1,
-    range_from: 1, 
-    range_to: 10000, 
-    technical_key: '',
-    environment: DianEnvironment.TEST, 
-    is_active: false
+    company_id: safeCompany.id,
+    factus_token:    (safeCompany.config as any)?.factus_token || '',
+    factus_env:      (safeCompany.config as any)?.factus_env  || 'sandbox',
+    resolution_number: (safeCompany.config as any)?.dian_resolution || '',
+    resolution_date:   (safeCompany.config as any)?.dian_resolution_date || '',
+    prefix:          (safeCompany.config as any)?.dian_prefix || 'SETP',
+    range_from:      (safeCompany.config as any)?.dian_range_from || 1,
+    range_to:        (safeCompany.config as any)?.dian_range_to  || 5000000,
+    current_number:  1,
+    nit_digit:       (safeCompany.config as any)?.dian_nit_digit || '0',
+    software_id: '', software_pin: '', technical_key: '',
+    environment: DianEnvironment.TEST,
+    is_active: !!(safeCompany.config as any)?.factus_token,
   });
 
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
@@ -196,23 +198,27 @@ const Settings: React.FC = () => {
         setPinUnlocked(false); // re-lock PIN after saving
       } 
       else if (activeTab === 'DIAN') {
-        // 1. Guardar en Contexto local
-        saveDianSettings(dianForm);
-        
-        // 2. Persistir en la tabla real 'business_settings' según tu captura
+        // Guardar en company.config — cada campo Factus vive aquí
+        const currentConfig = (safeCompany.config as any) || {};
+        const newConfig = {
+          ...currentConfig,
+          factus_token:        dianForm.factus_token,
+          factus_env:          dianForm.factus_env,
+          dian_resolution:     dianForm.resolution_number,
+          dian_resolution_date: dianForm.resolution_date,
+          dian_prefix:         dianForm.prefix,
+          dian_range_from:     dianForm.range_from,
+          dian_range_to:       dianForm.range_to,
+          dian_nit_digit:      dianForm.nit_digit,
+        };
         const { error } = await supabase
-          .from('business_settings')
-          .update({ 
-            dian_environment: dianForm.environment,
-            dian_software_id: dianForm.software_id,
-            dian_pin: dianForm.software_pin,
-            invoice_mode: dianForm.is_active ? 'electronic' : 'general',
-            // Asegúrate de mapear otras columnas si existen en tu DB
-          })
+          .from('companies')
+          .update({ config: newConfig })
           .eq('id', safeCompany.id);
 
         if (error) throw error;
-        toast.success('Configuración DIAN Sincronizada');
+        saveDianSettings(dianForm);
+        toast.success('✅ Configuración Factus guardada');
       }
     } catch (err: any) {
       toast.error('Error: ' + err.message);
@@ -650,74 +656,153 @@ const Settings: React.FC = () => {
             </div>
           )}
 
-          {/* TAB DIAN - COMPLETO CON SWITCH */}
+          {/* ══ TAB DIAN / FACTUS ══════════════════════════════════════════════════ */}
           {activeTab === 'DIAN' && (
-            <div className="space-y-6">
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <div className="flex justify-between items-start mb-6">
-                  <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                    <Receipt size={20} className="text-blue-600" /> Configuracion DIAN
-                  </h3>
+            <div className="space-y-5">
+
+              {/* ── Encabezado ─────────────────────────────────────────────── */}
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-slate-700">Habilitar</label>
-                    <button type="button" onClick={() => setDianForm({ ...dianForm, is_active: !dianForm.is_active })}
+                    <Receipt size={20} className="text-blue-600" />
+                    <h3 className="font-bold text-slate-800">Facturación Electrónica — Factus</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500">{dianForm.is_active ? 'Activo' : 'Inactivo'}</span>
+                    <button type="button" onClick={() => setDianForm(f => ({ ...f, is_active: !f.is_active }))}
                       className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${dianForm.is_active ? 'bg-green-500 justify-end' : 'bg-slate-300 justify-start'}`}>
                       <div className="bg-white w-4 h-4 rounded-full shadow-md" />
                     </button>
                   </div>
                 </div>
 
+                {/* Instrucción Factus */}
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-5 text-xs text-blue-700 space-y-1">
+                  <p className="font-bold text-blue-800">¿Cómo obtener tu token de Factus?</p>
+                  <p>1. Entra a <strong>factus.com.co</strong> y crea tu cuenta (cada empresa usa la suya).</p>
+                  <p>2. Ve a <strong>Perfil → API Tokens</strong> y genera un token.</p>
+                  <p>3. Pega el token abajo. Factus ya tiene tu resolución DIAN configurada.</p>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Token Factus */}
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-slate-600 mb-1">
+                      Token API de Factus <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9..."
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl font-mono text-sm outline-none focus:ring-2 focus:ring-blue-400"
+                      value={dianForm.factus_token || ''}
+                      onChange={e => setDianForm(f => ({ ...f, factus_token: e.target.value }))}
+                    />
+                    <p className="text-[10px] text-slate-400 mt-0.5">Se guarda cifrado. Nunca lo compartás.</p>
+                  </div>
+
+                  {/* Ambiente */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Ambiente</label>
-                    <select className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none" 
-                      value={dianForm.environment} 
-                      onChange={e => setDianForm({ ...dianForm, environment: e.target.value as DianEnvironment })}>
-                      <option value={DianEnvironment.TEST}>Pruebas / Habilitacion</option>
-                      <option value={DianEnvironment.PRODUCTION}>Produccion</option>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Ambiente</label>
+                    <select
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 text-sm"
+                      value={dianForm.factus_env || 'sandbox'}
+                      onChange={e => setDianForm(f => ({ ...f, factus_env: e.target.value as any }))}>
+                      <option value="sandbox">🧪 Sandbox / Pruebas (homologación)</option>
+                      <option value="production">🏭 Producción (facturas reales)</option>
                     </select>
                   </div>
+
+                  {/* Prefijo resolución */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Prefijo (Ej. SETT)</label>
-                    <input type="text" placeholder="Ej: SETT" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none" value={dianForm.prefix} onChange={e => setDianForm({ ...dianForm, prefix: e.target.value })} />
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Prefijo de resolución</label>
+                    <input type="text" placeholder="SETP"
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 text-sm font-mono uppercase"
+                      value={dianForm.prefix || ''}
+                      onChange={e => setDianForm(f => ({ ...f, prefix: e.target.value.toUpperCase() }))} />
                   </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">ID Software (DIAN)</label>
-                    <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-sm outline-none" value={dianForm.software_id} onChange={e => setDianForm({ ...dianForm, software_id: e.target.value })} />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">PIN Software</label>
-                    <input type="password" placeholder="••••••••" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none" value={dianForm.software_pin} onChange={e => setDianForm({ ...dianForm, software_pin: e.target.value })} />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Clave Tecnica</label>
-                    <input type="text" className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-sm outline-none" value={dianForm.technical_key} onChange={e => setDianForm({ ...dianForm, technical_key: e.target.value })} />
-                  </div>
-                </div>
 
-                {/* AREA DE CERTIFICADO */}
-                <div className="mt-6 border-t pt-6">
-                  <label className="block text-sm font-semibold text-slate-700 mb-3">Certificado Digital (.p12)</label>
-                  <div className="flex items-center gap-3">
-                    <button type="button" className="px-4 py-2 bg-slate-100 border border-slate-300 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-slate-200 transition-colors">
-                      <Upload size={16} /> Seleccionar
-                    </button>
-                    <span className="text-xs text-slate-400">Ningun archivo</span>
+                  {/* Número resolución */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Número de resolución DIAN</label>
+                    <input type="text" placeholder="18764000001"
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 text-sm font-mono"
+                      value={dianForm.resolution_number || ''}
+                      onChange={e => setDianForm(f => ({ ...f, resolution_number: e.target.value }))} />
                   </div>
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Contraseña Certificado</label>
-                    <input type="password" placeholder="Clave del archivo .p12" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none" />
+
+                  {/* Fecha resolución */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Fecha resolución</label>
+                    <input type="date"
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 text-sm"
+                      value={dianForm.resolution_date || ''}
+                      onChange={e => setDianForm(f => ({ ...f, resolution_date: e.target.value }))} />
+                  </div>
+
+                  {/* Rango desde */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Rango desde</label>
+                    <input type="number" min="1" placeholder="1"
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 text-sm"
+                      value={dianForm.range_from || ''}
+                      onChange={e => setDianForm(f => ({ ...f, range_from: +e.target.value }))} />
+                  </div>
+
+                  {/* Rango hasta */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Rango hasta</label>
+                    <input type="number" min="1" placeholder="5000000"
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 text-sm"
+                      value={dianForm.range_to || ''}
+                      onChange={e => setDianForm(f => ({ ...f, range_to: +e.target.value }))} />
+                  </div>
+
+                  {/* Dígito NIT */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Dígito verificación NIT</label>
+                    <input type="text" maxLength={1} placeholder="0"
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 text-sm font-mono"
+                      value={dianForm.nit_digit || ''}
+                      onChange={e => setDianForm(f => ({ ...f, nit_digit: e.target.value }))} />
                   </div>
                 </div>
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex gap-3">
-                <AlertTriangle className="text-blue-600 flex-shrink-0" />
-                <div>
-                  <h4 className="font-bold text-blue-800 text-sm">Informacion Importante</h4>
-                  <p className="text-xs text-blue-700 mt-1">Al activar PRODUCCION, todas las facturas seran enviadas a la DIAN. Complete las pruebas de habilitacion antes.</p>
+              {/* ── Tipos de documento habilitados ──────────────────────── */}
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <h4 className="font-bold text-slate-700 text-sm mb-3">Documentos habilitados</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="flex items-start gap-3 p-3 border border-slate-200 rounded-xl">
+                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Receipt size={16} className="text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">Factura electrónica de venta (FEV)</p>
+                      <p className="text-xs text-slate-500">Para ventas a empresas o personas con NIT/CC. Plena validez legal.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-3 border border-slate-200 rounded-xl">
+                    <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <span className="text-sm">🧾</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">Documento equivalente POS</p>
+                      <p className="text-xs text-slate-500">Para ventas rápidas a consumidor final sin identificación.</p>
+                    </div>
+                  </div>
                 </div>
               </div>
+
+              {/* ── Alerta producción ───────────────────────────────────── */}
+              {(dianForm.factus_env || 'sandbox') === 'production' && (
+                <div className="bg-amber-50 border border-amber-300 p-4 rounded-xl flex gap-3">
+                  <AlertTriangle className="text-amber-600 flex-shrink-0 mt-0.5" size={18} />
+                  <div>
+                    <h4 className="font-bold text-amber-800 text-sm">Ambiente de producción activo</h4>
+                    <p className="text-xs text-amber-700 mt-0.5">Todas las facturas que emitas tendrán validez legal ante la DIAN. Asegúrate de haber completado las pruebas de homologación en sandbox primero.</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
