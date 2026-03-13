@@ -83,7 +83,7 @@ const Settings: React.FC = () => {
   const allowedMethods = ALLOWED_PAYMENT_METHODS[plan] || ALLOWED_PAYMENT_METHODS['BASIC'];
 
   const [formData, setFormData] = useState(safeCompany);
-  const [activeTab, setActiveTab] = useState<'GENERAL' | 'DIAN' | 'BRANDING' | 'PAGOS'>('GENERAL');
+  const [activeTab, setActiveTab] = useState<'GENERAL' | 'DIAN' | 'BRANDING' | 'PAGOS' | 'CATALOGO'>('GENERAL');
   const [taxRate, setTaxRate] = useState<number>(safeCompany.config?.tax_rate ?? 0);
   const [deleteInvoicePin, setDeleteInvoicePin] = useState<string>(
     (safeCompany.config as any)?.delete_invoice_pin || ''
@@ -133,6 +133,11 @@ const Settings: React.FC = () => {
 
   const [savingBranding, setSavingBranding] = useState(false);
   const [invoiceTerms, setInvoiceTerms] = useState<string>('');
+  // ── Catálogo WhatsApp ────────────────────────────────────────────────────
+  const [catalogEnabled, setCatalogEnabled] = useState<boolean>((safeCompany as any).catalog_enabled || false);
+  const [catalogWhatsapp, setCatalogWhatsapp] = useState<string>((safeCompany as any).catalog_whatsapp || '');
+  const [catalogMessage, setCatalogMessage] = useState<string>((safeCompany as any).catalog_message || '¡Hola! Me interesa este producto:');
+  const [catalogLinkCopied, setCatalogLinkCopied] = useState(false);
 
   // Sincronizar TODOS los estados cuando el contexto carga/actualiza company
   // Resuelve el caso donde company llega null en el primer render (async)
@@ -271,6 +276,24 @@ const Settings: React.FC = () => {
     }
   };
 
+  const [savingCatalog, setSavingCatalog] = useState(false);
+  const handleSaveCatalog = async () => {
+    setSavingCatalog(true);
+    try {
+      const { error } = await supabase.from('companies').update({
+        catalog_enabled: catalogEnabled,
+        catalog_whatsapp: catalogWhatsapp || null,
+        catalog_message: catalogMessage || null,
+      }).eq('id', safeCompany.id);
+      if (error) throw error;
+      toast.success('Catálogo guardado');
+    } catch (err: any) {
+      toast.error('Error: ' + err.message);
+    } finally {
+      setSavingCatalog(false);
+    }
+  };
+
   const handlePlanChange = (planId: string) => {
     updateCompanyConfig({ subscription_plan: planId } as any);
     setIsSubscriptionModalOpen(false);
@@ -364,6 +387,10 @@ const Settings: React.FC = () => {
           <button type="button" onClick={() => setActiveTab('PAGOS')}
             className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${activeTab === 'PAGOS' ? 'bg-purple-100 text-purple-700' : 'text-slate-600 hover:bg-slate-50'}`}>
             <CreditCard size={16} /> Métodos de Pago
+          </button>
+          <button type="button" onClick={() => setActiveTab('CATALOGO')}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${activeTab === 'CATALOGO' ? 'bg-green-100 text-green-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+            🛍️ Catálogo WhatsApp
           </button>
         </div>
       </div>
@@ -1230,6 +1257,118 @@ const Settings: React.FC = () => {
 
           </div>
         )}
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* TAB CATÁLOGO WHATSAPP                                             */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'CATALOGO' && (() => {
+          const catalogUrl = `${window.location.origin}${window.location.pathname}#/catalogo/${safeCompany.id}`;
+          const waShareUrl = `https://wa.me/?text=${encodeURIComponent('🛍️ Mira nuestro catálogo en línea:\n' + catalogUrl)}`;
+          return (
+            <div className="md:col-span-3 space-y-5">
+
+              {/* Header */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-1">
+                  🛍️ Catálogo Digital por WhatsApp
+                </h3>
+                <p className="text-sm text-slate-500">
+                  Comparte un enlace público con tus clientes para que vean tus productos y te escriban directamente por WhatsApp.
+                </p>
+              </div>
+
+              {/* Toggle habilitar */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-slate-800">Habilitar catálogo público</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Cualquier persona con el link puede ver tus productos</p>
+                  </div>
+                  <button type="button" onClick={() => setCatalogEnabled(!catalogEnabled)}
+                    className={`relative w-12 h-6 rounded-full transition-colors ${catalogEnabled ? 'bg-green-500' : 'bg-slate-200'}`}>
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${catalogEnabled ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+
+                {catalogEnabled && (
+                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-xl">
+                    <p className="text-xs font-bold text-green-700 mb-2">🔗 Link de tu catálogo:</p>
+                    <div className="flex gap-2">
+                      <input readOnly value={catalogUrl}
+                        className="flex-1 text-xs bg-white border border-green-200 rounded-lg px-3 py-2 text-slate-600 font-mono" />
+                      <button type="button"
+                        onClick={() => { navigator.clipboard.writeText(catalogUrl); setCatalogLinkCopied(true); setTimeout(() => setCatalogLinkCopied(false), 2000); }}
+                        className="px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 whitespace-nowrap">
+                        {catalogLinkCopied ? '✓ Copiado' : 'Copiar'}
+                      </button>
+                      <a href={waShareUrl} target="_blank" rel="noopener noreferrer"
+                        className="px-3 py-2 bg-[#25D366] text-white rounded-lg text-xs font-bold hover:bg-[#1fba59] whitespace-nowrap flex items-center gap-1">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                        Compartir
+                      </a>
+                    </div>
+                    <a href={catalogUrl} target="_blank" rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 text-xs text-green-600 hover:underline">
+                      👁️ Ver catálogo como cliente →
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* Configuración WhatsApp */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+                <h4 className="font-semibold text-slate-700">Configuración de contacto</h4>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Número de WhatsApp
+                    <span className="ml-2 text-xs text-slate-400 font-normal">Con o sin código de país (ej: 3001234567 o 573001234567)</span>
+                  </label>
+                  <input value={catalogWhatsapp} onChange={e => setCatalogWhatsapp(e.target.value)}
+                    placeholder="3001234567"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-green-400" />
+                  {catalogWhatsapp && (
+                    <a href={`https://wa.me/${catalogWhatsapp.replace(/\D/g,'').replace(/^(?!57)/,'57')}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-xs text-green-600 hover:underline">
+                      ✓ Probar este número →
+                    </a>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Mensaje de apertura
+                    <span className="ml-2 text-xs text-slate-400 font-normal">Se envía antes del nombre del producto</span>
+                  </label>
+                  <textarea value={catalogMessage} onChange={e => setCatalogMessage(e.target.value)}
+                    rows={2} placeholder="¡Hola! Me interesa este producto:"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-green-400 resize-none" />
+                  <p className="text-xs text-slate-400 mt-1">
+                    Vista previa del mensaje que recibe tu WhatsApp: "<em>{catalogMessage} *Nombre del producto* Precio: $35.000</em>"
+                  </p>
+                </div>
+              </div>
+
+              {/* Info */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-500 space-y-1.5">
+                <p className="font-semibold text-slate-600">¿Cómo funciona?</p>
+                <p>• Comparte el link por WhatsApp, Instagram o donde quieras</p>
+                <p>• Tus clientes ven todos tus productos con foto, precio y descripción</p>
+                <p>• Cada producto tiene un botón "Pedir por WhatsApp" que abre el chat directo contigo</p>
+                <p>• Para ocultar un producto del catálogo, desactívalo en Inventario</p>
+              </div>
+
+              {/* Botón guardar */}
+              <div className="flex justify-end">
+                <button type="button" onClick={handleSaveCatalog} disabled={savingCatalog}
+                  className="px-6 py-2.5 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 text-sm">
+                  {savingCatalog ? 'Guardando...' : '💾 Guardar configuración'}
+                </button>
+              </div>
+
+            </div>
+          );
+        })()}
+
       </form>
 
       {/* MODAL DE SEGURIDAD (PASSWORD ADMIN) */}

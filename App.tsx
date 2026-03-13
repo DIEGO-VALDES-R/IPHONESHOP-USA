@@ -31,6 +31,7 @@ import { ContractSign } from './ContractSign';
 import AcceptInvitation from './AcceptInvitation';
 import { Toaster } from 'react-hot-toast';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
+import PublicCatalog from './pages/PublicCatalog';
 
 // ── CORRECCIÓN AUTH-04 / FRO-01 ───────────────────────────────────────────────
 // Las constantes sensibles se mueven a variables de entorno .env
@@ -597,11 +598,17 @@ const App: React.FC = () => {
       <Toaster position="top-right" />
       <PWAInstallPrompt />
       <Router>
-        <DatabaseProvider>
-          <Routes>
-            <Route path="/*" element={<Layout onAdminPanel={undefined}><AppRoutes /></Layout>} />
-          </Routes>
-        </DatabaseProvider>
+        <Routes>
+          {/* Ruta pública — sin autenticación ni DatabaseProvider */}
+          <Route path="/catalogo/:companyId" element={<PublicCatalog />} />
+          <Route path="/*" element={
+            <DatabaseProvider>
+              <Routes>
+                <Route path="/*" element={<Layout onAdminPanel={undefined}><AppRoutes /></Layout>} />
+              </Routes>
+            </DatabaseProvider>
+          } />
+        </Routes>
       </Router>
     </>
   );
