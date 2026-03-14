@@ -126,6 +126,17 @@ export const LandingPage: React.FC<{ onLogin: () => void; onRegister: () => void
     .feat-card:hover { border-color:rgba(59,130,246,.4) !important; }
   `;
 
+  // Negocios en landing
+  const [landingCompanies, setLandingCompanies] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    supabase.from('companies')
+      .select('id,name,logo_url,subscription_plan')
+      .eq('show_in_landing', true)
+      .eq('subscription_status', 'ACTIVE')
+      .order('created_at', { ascending: true })
+      .then(({ data }) => setLandingCompanies(data || []));
+  }, []);
+
   const C = {
     bg:   '#080d1a',
     bg2:  '#0d1426',
@@ -386,6 +397,48 @@ export const LandingPage: React.FC<{ onLogin: () => void; onRegister: () => void
           </p>
         </div>
       </section>
+
+      {/* ── CLIENTES ── */}
+      {landingCompanies.length > 0 && (
+        <section style={{padding:'56px 6%', background: C.bg, borderTop:`1px solid ${C.border}`}}>
+          <div style={{maxWidth:1100,margin:'0 auto',textAlign:'center'}}>
+            <p style={{color:C.muted,fontSize:12,fontWeight:700,letterSpacing:3,textTransform:'uppercase',marginBottom:28}}>
+              Negocios que confían en POSmaster
+            </p>
+            <div style={{
+              display:'flex', flexWrap:'wrap', gap:20,
+              justifyContent:'center', alignItems:'center',
+            }}>
+              {landingCompanies.map(c => (
+                <div key={c.id} style={{
+                  display:'flex', alignItems:'center', gap:10,
+                  background:'rgba(255,255,255,0.04)',
+                  border:'1px solid rgba(255,255,255,0.08)',
+                  borderRadius:12, padding:'10px 18px',
+                  transition:'all 0.2s',
+                }}>
+                  {c.logo_url ? (
+                    <img src={c.logo_url} alt={c.name}
+                      style={{width:32,height:32,borderRadius:8,objectFit:'cover',background:'#fff'}} />
+                  ) : (
+                    <div style={{
+                      width:32,height:32,borderRadius:8,
+                      background:'linear-gradient(135deg,#3b82f6,#6366f1)',
+                      display:'flex',alignItems:'center',justifyContent:'center',
+                      fontSize:13,fontWeight:800,color:'#fff',flexShrink:0,
+                    }}>
+                      {c.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span style={{color:'#cbd5e1',fontSize:13,fontWeight:600,whiteSpace:'nowrap'}}>
+                    {c.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ── PLANES ── */}
       <section style={{padding:'80px 6%',background:C.bg2}}>
@@ -1011,7 +1064,8 @@ export const AdminPanel: React.FC<{ onExit: () => void; onPreview: (companyId: s
     name: '', nit: '', email: '', phone: '', plan: 'BASIC',
     subscription_status: 'ACTIVE',
     subscription_start_date: '', subscription_end_date: '',
-    feature_flags: {} as Record<string,boolean>
+    feature_flags: {} as Record<string,boolean>,
+    show_in_landing: false,
   });
 
   const load = async () => {
@@ -1109,6 +1163,7 @@ export const AdminPanel: React.FC<{ onExit: () => void; onPreview: (companyId: s
       subscription_start_date: editForm.subscription_start_date || null,
       subscription_end_date: editForm.subscription_end_date || null,
       feature_flags: editForm.feature_flags,
+      show_in_landing: editForm.show_in_landing,
     }).eq('id', selectedCompany.id);
     if (error) { toast.error(error.message); return; }
     setCompanies(prev => prev.map(c => c.id === selectedCompany.id ? {
@@ -1180,7 +1235,8 @@ export const AdminPanel: React.FC<{ onExit: () => void; onPreview: (companyId: s
       subscription_end_date: c.subscription_end_date || '',
       feature_flags: c.feature_flags && Object.keys(c.feature_flags).length > 0
         ? c.feature_flags
-        : getDefaultFlagsLP(c.subscription_plan || 'BASIC')
+        : getDefaultFlagsLP(c.subscription_plan || 'BASIC'),
+      show_in_landing: c.show_in_landing || false,
     });
     setShowEdit(true);
   };
@@ -1650,6 +1706,32 @@ export const AdminPanel: React.FC<{ onExit: () => void; onPreview: (companyId: s
                 <select value={editForm.subscription_status} onChange={fe('subscription_status')} style={{ ...inputStyle, cursor: 'pointer' }}>
                   <option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option><option value="PENDING">Pendiente</option><option value="PAST_DUE">Vencido</option>
                 </select>
+              </div>
+
+              {/* ── Mostrar en landing ── */}
+              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16, marginTop: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>Mostrar en página principal</p>
+                    <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                      El logo/nombre aparece en la sección "Negocios que confían en nosotros"
+                    </p>
+                  </div>
+                  <button type="button"
+                    onClick={() => setEditForm(prev => ({ ...prev, show_in_landing: !prev.show_in_landing }))}
+                    style={{
+                      width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+                      background: editForm.show_in_landing ? '#22c55e' : '#e2e8f0',
+                      position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                    }}>
+                    <div style={{
+                      width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                      position: 'absolute', top: 3, transition: 'left 0.2s',
+                      left: editForm.show_in_landing ? 23 : 3,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                    }} />
+                  </button>
+                </div>
               </div>
 
               {/* ── Feature Flags ── */}
