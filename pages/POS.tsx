@@ -54,8 +54,23 @@ const autoOpenDrawer = async () => {
 
 const POS: React.FC = () => {
   const { formatMoney } = useCurrency();
-  const { products, session, processSale, company, refreshAll } = useDatabase();
+  const { products, session, processSale, company, refreshAll, userRole } = useDatabase();
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Pantalla completa automática para rol vendedor (CASHIER / STAFF)
+  const isCashier = userRole === 'CASHIER' || userRole === 'STAFF';
+  useEffect(() => {
+    if (!isCashier) return;
+    const el = document.documentElement;
+    if (el.requestFullscreen && !document.fullscreenElement) {
+      el.requestFullscreen().catch(() => {});
+    }
+    return () => {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+  }, [isCashier]);
   const location       = useLocation();
   const navigate       = useNavigate();
 
@@ -665,7 +680,7 @@ const POS: React.FC = () => {
   }
 
   return (
-    <div className="flex h-[calc(100vh-theme(spacing.24))] gap-6 relative">
+    <div className={`flex gap-6 relative ${isCashier ? "h-screen fixed inset-0 z-50 bg-white" : "h-[calc(100vh-theme(spacing.24))]"}`}>
       <Toaster position="bottom-right" />
 
       <InvoiceModal isOpen={showInvoice} onClose={() => setShowInvoice(false)} sale={lastSale} company={company} />

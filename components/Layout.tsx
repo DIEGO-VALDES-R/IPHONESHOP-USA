@@ -50,7 +50,15 @@ const MODULE_PATHS: Record<string, string> = {
   supplies:    '/supplies',
   team:        '/team',
   nomina:      '/nomina',
+  reports:     '/reports',
 };
+
+// Tipo para items del menú con soporte de grupos
+interface NavItem { label: string; path: string; icon: React.ElementType; }
+interface NavGroup { group: string; items: NavItem[]; }
+type NavEntry = NavItem | NavGroup;
+
+function isNavGroup(e: NavEntry): e is NavGroup { return 'group' in e; }
 
 function getNavItems(
   businessType: string,
@@ -58,59 +66,92 @@ function getNavItems(
   isAdmin: boolean,
   isPro: boolean,
   hasFeature: (f: string) => boolean,
-) {
+): NavEntry[] {
   const p = (key: string) => hasPermission(key) || isAdmin;
   const type = businessType || 'general';
-  const isRest = ['restaurante', 'restaurant', 'cocina', 'cafeteria'].includes(type);
 
   const invLabel =
-    isRest             ? 'Insumos Cocina'   :
-    type==='zapateria' ? 'Materiales'       :
+    ['restaurante','restaurant','cocina','cafeteria'].includes(type) ? 'Insumos Cocina' :
+    type==='zapateria' ? 'Materiales' :
     type==='salon'||type==='salón' ? 'Insumos Salón' :
-    type==='farmacia'  ? 'Insumos'          :
-    type==='veterinaria' ? 'Insumos Vet'    :
+    type==='farmacia'  ? 'Insumos' :
+    type==='veterinaria' ? 'Insumos Vet' :
     type==='odontologia' ? 'Insumos Dental' :
     'Inventario';
 
-  const items = [
-    { label: 'Dashboard',          path: MODULE_PATHS.dashboard,   icon: LayoutDashboard, show: true },
-    { label: 'Punto de Venta',     path: MODULE_PATHS.pos,         icon: ShoppingCart,    show: p('can_sell') },
-    { label: 'Control de Caja',    path: MODULE_PATHS.cash,        icon: Landmark,        show: p('can_open_cash') },
-    { label: invLabel,             path: MODULE_PATHS.inventory,   icon: Package,         show: p('can_manage_inventory') },
-    { label: 'Historial Facturas', path: MODULE_PATHS.invoices,    icon: Receipt,         show: p('can_view_reports') },
-    { label: 'Cotizaciones',       path: MODULE_PATHS.quotes,      icon: FileText,        show: p('can_sell') && hasFeature('quotes') },
-    { label: 'Órdenes de Compra',  path: MODULE_PATHS.purchases,   icon: Truck,           show: p('can_manage_inventory') && hasFeature('purchase_orders') },
-    { label: 'Devoluciones / NC',  path: MODULE_PATHS.creditNotes, icon: RotateCcw,       show: p('can_refund') && hasFeature('credit_notes') },
-    { label: 'Clientes',           path: MODULE_PATHS.customers,   icon: UserRound,       show: p('can_view_reports') },
-  ];
+  const moduleLabel =
+    ['restaurante','restaurant','cocina','cafeteria'].includes(type) ? 'Restaurante' :
+    type==='salon'||type==='salón' ? 'Salón de Belleza' :
+    type==='odontologia' ? 'Odontología' :
+    type==='veterinaria' ? 'Veterinaria' :
+    type==='farmacia'    ? 'Farmacia' :
+    type==='zapateria'   ? 'Zapatería' :
+    'Servicio Técnico';
 
-  if (type === 'restaurante') {
-    items.push(
-      { label: 'Mesas',          path: MODULE_PATHS.tables,  icon: Utensils, show: p('can_sell') && hasFeature('restaurant') },
-      { label: 'Display Cocina', path: MODULE_PATHS.kitchen, icon: ChefHat,  show: isAdmin && hasFeature('restaurant') },
-    );
-  } else if (type === 'salon') {
-    items.push({ label: 'Salón de Belleza', path: MODULE_PATHS.salon,       icon: Scissors,    show: p('can_sell') && hasFeature('salon') });
-  } else if (type === 'odontologia') {
-    items.push({ label: 'Odontología',      path: MODULE_PATHS.dentistry,   icon: Stethoscope, show: p('can_sell') && hasFeature('dental') });
-  } else if (type === 'veterinaria') {
-    items.push({ label: 'Veterinaria',      path: MODULE_PATHS.veterinaria, icon: PawPrint,    show: p('can_sell') && hasFeature('vet') });
-  } else if (type === 'farmacia') {
-    items.push({ label: 'Farmacia',         path: MODULE_PATHS.farmacia,    icon: Pill,        show: p('can_sell') && hasFeature('pharmacy') });
-  } else if (type === 'zapateria') {
-    items.push({ label: 'Zapatería / Rep.', path: MODULE_PATHS.shoe,        icon: Wrench,      show: p('can_view_repairs') && hasFeature('shoe_repair') });
-  } else {
-    items.push({ label: 'Servicio Técnico', path: MODULE_PATHS.repairs,     icon: Wrench,      show: p('can_view_repairs') });
+  // ── Grupo Ventas ────────────────────────────────────────────
+  const ventasItems: NavItem[] = [];
+  if (p('can_sell'))            ventasItems.push({ label: 'Punto de Venta',     path: MODULE_PATHS.pos,         icon: ShoppingCart });
+  if (p('can_open_cash'))       ventasItems.push({ label: 'Control de Caja',    path: MODULE_PATHS.cash,        icon: Landmark });
+  if (p('can_view_reports'))    ventasItems.push({ label: 'Historial Facturas', path: MODULE_PATHS.invoices,    icon: Receipt });
+  if (p('can_sell') && hasFeature('quotes'))
+                                ventasItems.push({ label: 'Cotizaciones',       path: MODULE_PATHS.quotes,      icon: FileText });
+  if (p('can_refund') && hasFeature('credit_notes'))
+                                ventasItems.push({ label: 'Devoluciones / NC',  path: MODULE_PATHS.creditNotes, icon: RotateCcw });
+
+  // ── Grupo Inventario ─────────────────────────────────────────
+  const inventarioItems: NavItem[] = [];
+  if (p('can_manage_inventory'))
+                                inventarioItems.push({ label: invLabel,            path: MODULE_PATHS.inventory,   icon: Package });
+  if (p('can_manage_inventory') && hasFeature('purchase_orders'))
+                                inventarioItems.push({ label: 'Órdenes de Compra', path: MODULE_PATHS.purchases,   icon: Truck });
+  if (isAdmin)                  inventarioItems.push({ label: 'Insumos',           path: MODULE_PATHS.supplies,    icon: FlaskConical });
+
+  // ── Grupo Clientes y Finanzas ────────────────────────────────
+  const finanzasItems: NavItem[] = [];
+  if (p('can_view_reports'))    finanzasItems.push({ label: 'Clientes',       path: MODULE_PATHS.customers,   icon: UserRound });
+  if (p('can_view_reports'))    finanzasItems.push({ label: 'Cartera / CxC',  path: MODULE_PATHS.receivables, icon: FileText });
+
+  // ── Grupo Módulo vertical ────────────────────────────────────
+  const moduloItems: NavItem[] = [];
+  if (['restaurante','restaurant','cocina','cafeteria'].includes(type)) {
+    if (p('can_sell') && hasFeature('restaurant'))  moduloItems.push({ label: 'Mesas',          path: MODULE_PATHS.tables,      icon: Utensils });
+    if (isAdmin && hasFeature('restaurant'))         moduloItems.push({ label: 'Display Cocina', path: MODULE_PATHS.kitchen,     icon: ChefHat });
+  } else if ((type==='salon'||type==='salón') && hasFeature('salon')) {
+    if (p('can_sell'))                               moduloItems.push({ label: 'Salón de Belleza', path: MODULE_PATHS.salon,     icon: Scissors });
+  } else if (type==='odontologia' && hasFeature('dental')) {
+    if (p('can_sell'))                               moduloItems.push({ label: 'Odontología',    path: MODULE_PATHS.dentistry,   icon: Stethoscope });
+  } else if (type==='veterinaria' && hasFeature('vet')) {
+    if (p('can_sell'))                               moduloItems.push({ label: 'Veterinaria',    path: MODULE_PATHS.veterinaria, icon: PawPrint });
+  } else if (type==='farmacia' && hasFeature('pharmacy')) {
+    if (p('can_sell'))                               moduloItems.push({ label: 'Farmacia',       path: MODULE_PATHS.farmacia,    icon: Pill });
+  } else if (type==='zapateria' && hasFeature('shoe_repair')) {
+    if (p('can_view_repairs'))                       moduloItems.push({ label: 'Zapatería / Rep.', path: MODULE_PATHS.shoe,     icon: Wrench });
+  } else if (type === 'general' || type === 'tienda_tecnologia' || type === 'otro') {
+    if (p('can_view_repairs'))                       moduloItems.push({ label: 'Servicio Técnico', path: MODULE_PATHS.repairs,  icon: Wrench });
   }
 
-  items.push(
-    { label: 'Cartera / CxC', path: MODULE_PATHS.receivables, icon: FileText,     show: p('can_view_reports') },
-    { label: 'Insumos',       path: MODULE_PATHS.supplies,    icon: FlaskConical, show: isAdmin },
-    { label: 'Equipo',        path: MODULE_PATHS.team,        icon: Users,        show: isPro && p('can_manage_team') },
-    { label: 'Nómina',        path: MODULE_PATHS.nomina,      icon: Users2,       show: isAdmin && hasFeature('nomina') },
-  );
+  // ── Grupo Administración ─────────────────────────────────────
+  const adminItems: NavItem[] = [];
+  adminItems.push({ label: 'Reportes', path: MODULE_PATHS.reports, icon: BarChart2 });
+  if (isPro && p('can_manage_team'))                    adminItems.push({ label: 'Equipo',  path: MODULE_PATHS.team,   icon: Users });
+  if (isAdmin && hasFeature('nomina'))                  adminItems.push({ label: 'Nómina',  path: MODULE_PATHS.nomina, icon: Users2 });
 
-  return items.filter(i => i.show);
+  // ── Componer resultado ───────────────────────────────────────
+  const result: NavEntry[] = [
+    { label: 'Dashboard', path: MODULE_PATHS.dashboard, icon: LayoutDashboard },
+  ];
+  if (ventasItems.length)     result.push({ group: 'Ventas',                items: ventasItems });
+  if (inventarioItems.length) result.push({ group: 'Inventario',            items: inventarioItems });
+  if (finanzasItems.length)   result.push({ group: 'Clientes y Finanzas',   items: finanzasItems });
+  if (moduloItems.length)     result.push({ group: `Módulo ${moduleLabel}`, items: moduloItems });
+  if (adminItems.length)      result.push({ group: 'Administración',        items: adminItems });
+
+  return result;
+}
+
+// Helper para obtener lista plana (para secciones inactivas / preview)
+function flatNavItems(entries: NavEntry[]): NavItem[] {
+  return entries.flatMap(e => isNavGroup(e) ? e.items : [e]);
 }
 
 // ── NavLink ───────────────────────────────────────────────────────────────────
@@ -145,7 +186,7 @@ const BranchSection: React.FC<{
   branchLinkId?:  string;           // id para generar link de sucursal (solo child branches)
   name:           string;
   businessType:   string;
-  items:          { label: string; path: string; icon: React.ElementType }[];
+  items:          NavEntry[];
   activeSectionId: string;          // ← CLAVE: qué sección está actualmente activa
   setActiveSectionId: (id: string) => void;
   fontColor:      string;
@@ -242,30 +283,41 @@ const BranchSection: React.FC<{
                 </button>
               )}
               <div style={{ opacity: 0.35, pointerEvents: 'none' }}>
-                {items.slice(0, 5).map(item => (
+                {flatNavItems(items).slice(0, 5).map(item => (
                   <div key={item.path} className="flex items-center gap-2.5 px-3 py-1.5 text-sm" style={{ color: fontColor }}>
                     <item.icon size={14} />
                     <span style={{ fontSize: 12 }}>{item.label}</span>
                   </div>
                 ))}
-                {items.length > 5 && (
+                {flatNavItems(items).length > 5 && (
                   <p className="px-3 py-1 text-[10px]" style={{ color: fontColor, opacity: 0.4 }}>
-                    +{items.length - 5} módulos más…
+                    +{flatNavItems(items).length - 5} módulos más…
                   </p>
                 )}
               </div>
             </>
           ) : (
-            /* Sección activa: items completamente funcionales con isActive correcto */
-            items.map(item => (
-              <NavLink
-                key={item.path}
-                item={item}
-                isActive={isActive(item.path)}
-                fontColor={fontColor}
-                onClick={onNav}
-              />
-            ))
+            /* Sección activa: items con grupos y separadores */
+            items.map((entry, idx) => {
+              if (isNavGroup(entry)) {
+                return (
+                  <div key={entry.group}>
+                    {idx > 0 && <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '4px 0 2px' }} />}
+                    <p style={{
+                      fontSize: 9, fontWeight: 700, letterSpacing: '0.07em',
+                      textTransform: 'uppercase', opacity: 0.4,
+                      color: fontColor, padding: '4px 12px 2px',
+                    }}>{entry.group}</p>
+                    {entry.items.map(item => (
+                      <NavLink key={item.path} item={item} isActive={isActive(item.path)} fontColor={fontColor} onClick={onNav} />
+                    ))}
+                  </div>
+                );
+              }
+              return (
+                <NavLink key={entry.path} item={entry} isActive={isActive(entry.path)} fontColor={fontColor} onClick={onNav} />
+              );
+            })
           )}
         </div>
       )}

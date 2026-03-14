@@ -1378,6 +1378,11 @@ const Inventory: React.FC = () => {
         <div className={`absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-semibold ${(p.stock_quantity||0) <= (p.stock_min||5) ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
           Stock: {p.stock_quantity ?? 0}
         </div>
+        {(p as any).has_variants && (
+          <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-indigo-600 text-white rounded text-[10px] font-bold flex items-center gap-0.5">
+            <Tag size={9} /> VAR
+          </div>
+        )}
       </div>
       <div className="p-4 space-y-3">
         <div>
